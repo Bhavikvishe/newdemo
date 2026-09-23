@@ -13,12 +13,14 @@ export function clsLabel(cls: DetectionClass, lang: Language): string {
     case 'manta': return t('cls.manta');
     case 'airplane': return t('cls.airplane');
     case 'human': return t('cls.human');
+    case 'mine': return t('cls.mine');
   }
 }
 
 export function clsShort(cls: DetectionClass): string {
   switch (cls) {
     case 'ghost_fishing_gear': return 'GFG';
+    case 'mine': return 'MINE';
     default: return cls.slice(0, 4).toUpperCase();
   }
 }

@@ -17,6 +17,8 @@ server/best.pt
 /best.pt
 __pycache__/
 *.pyc
+.venv/
+venv/
 
 # Editor directories and files
 .vscode/*

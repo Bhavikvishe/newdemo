@@ -4,6 +4,7 @@ import { makeT } from '../lib/i18n';
 import { CLASS_LIST, CLASS_META, fmtCoordinate, fmtDT, timeAgo, toCSV, download } from '../lib/mock';
 import { clsLabel, riskLabel } from '../lib/labels';
 import { renderFrame } from '../lib/sonar';
+import { getCachedImage } from '../lib/detect';
 import { PageHead, Card, Button, RiskBadge, ClassBadge, StatusBadge, Select, EmptyState } from '../lib/ui';
 import { Link } from '../lib/router';
 import { IconDoc, IconSearch } from '../components/Icons';
@@ -120,7 +121,18 @@ export function HistoryPage() {
                     <tr key={d.id}>
                       <td>
                         <Link to={`detail/${d.id}`} className="row" style={{ gap: 10 }}>
-                          {framed.has(d.id) ? <img className="sonimg thumb" src={framed.get(d.id)} alt="" width={44} height={28} /> : <span style={{ width: 44 }} />}
+                          {d.imageUrl || getCachedImage(d.id) || getCachedImage(d.imageId) || framed.has(d.id) ? (
+                            <img
+                              className="sonimg thumb"
+                              src={d.imageUrl || getCachedImage(d.id) || getCachedImage(d.imageId) || framed.get(d.id)}
+                              alt=""
+                              width={44}
+                              height={28}
+                              style={{ objectFit: 'cover', borderRadius: 4 }}
+                            />
+                          ) : (
+                            <span style={{ width: 44 }} />
+                          )}
                           <span>
                             <b className="mono" style={{ fontSize: 12 }}>{d.id}</b>
                             <div className="mono tiny muted">{timeAgo(d.detectionTime, language)}</div>

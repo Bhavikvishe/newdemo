@@ -4,6 +4,7 @@ import { makeT } from '../lib/i18n';
 import { CLASS_META, deptById, fmtCoordinate, fmtDT, fmtSize, fmtWeight, pct, remTime, OPERATORS } from '../lib/mock';
 import { alertStatusLabel, categoryLabel, clsLabel } from '../lib/labels';
 import { renderFrame } from '../lib/sonar';
+import { getCachedImage } from '../lib/detect';
 import { PageHead, Card, CardHead, Button, RiskBadge, StatusBadge, Tag, Kv, EmptyState } from '../lib/ui';
 import { Link, matchRoute, useHashRoute } from '../lib/router';
 import { IconArrowRight, IconCheck, IconDoc, IconNote } from '../components/Icons';
@@ -35,7 +36,8 @@ export function DetailPage() {
 
   const meta = CLASS_META[det.className];
   const isMine = user?.department === det.department;
-  const frame = renderFrame(det, { width: 640 }, language);
+  const realImage = det.imageUrl || getCachedImage(det.id) || getCachedImage(det.imageId);
+  const frame = realImage || renderFrame(det, { width: 640 }, language);
   const isHuman = det.className === 'human';
   const isMarine = meta.category === 'marine-life';
 
@@ -68,22 +70,105 @@ export function DetailPage() {
       <div className="grid cols-12" style={{ gap: 16 }}>
         <div className="span-7 stack" style={{ gap: 16 }}>
           <Card>
-            <CardHead kt={t('detail.sonarRecord')} title={t('detail.detectedObject')} right={<span className="badge b-accent">{t('detail.aiModel', { model: meta.aiModel })}</span>} />
-            <div className="sonimg" style={{ position: 'relative', borderRadius: 12, overflow: 'hidden' }}>
-              <img src={frame} alt={t('detail.sonarFrameAlt')} width={640} height={186} style={{ width: '100%', height: 'auto', display: 'block' }} />
-              <div
+            <CardHead
+              kt={det.isRealModel ? 'REAL YOLO MODEL (best.pt)' : t('detail.sonarRecord')}
+              title={t('detail.detectedObject')}
+              right={
+                <span className="badge b-accent">
+                  {det.isRealModel
+                    ? `AI · best.pt @ conf ${(det.confidence * 100).toFixed(1)}%`
+                    : t('detail.aiModel', { model: meta.aiModel })}
+                </span>
+              }
+            />
+            <div className="sonimg" style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', background: '#050b14' }}>
+              <img
+                src={frame}
+                alt={t('detail.sonarFrameAlt')}
+                width={640}
+                height={280}
                 style={{
-                  position: 'absolute',
-                  left: `${det.boundingBox.x * 100}%`,
-                  top: `${det.boundingBox.y * 100}%`,
-                  width: `${det.boundingBox.width * 100}%`,
-                  height: `${det.boundingBox.height * 100}%`,
-                  border: '2px solid var(--accent)',
+                  width: '100%',
+                  maxHeight: 460,
+                  objectFit: 'contain',
+                  display: 'block',
                 }}
               />
-              <div className="row-between" style={{ position: 'absolute', top: 8, left: 8, right: 8 }}>
-                <span className="badge b-accent">{t(meta.category === 'marine-life' ? 'detail.badgeMonitoring' : 'detail.badgeDebrisAnomaly')}</span>
-                <span className="badge b-plain">{clsLabel(det.className, language).toUpperCase()}</span>
+              {det.predictions && det.predictions.length > 0 ? (
+                det.predictions.map((p, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      position: 'absolute',
+                      left: `${p.bbox.x * 100}%`,
+                      top: `${p.bbox.y * 100}%`,
+                      width: `${p.bbox.width * 100}%`,
+                      height: `${p.bbox.height * 100}%`,
+                      border: idx === 0 ? '2.5px solid var(--accent)' : '2px solid rgba(0, 220, 200, 0.8)',
+                      background: idx === 0 ? 'rgba(0, 240, 255, 0.12)' : 'rgba(0, 220, 200, 0.05)',
+                      boxShadow: '0 0 0 1px rgba(0,0,0,0.6)',
+                      pointerEvents: 'none',
+                    }}
+                  >
+                    <span
+                      style={{
+                        position: 'absolute',
+                        bottom: '100%',
+                        left: 0,
+                        background: idx === 0 ? 'var(--accent)' : 'rgba(2,6,12,0.92)',
+                        color: idx === 0 ? '#000' : 'var(--accent)',
+                        fontWeight: 700,
+                        fontSize: 10,
+                        padding: '1px 5px',
+                        borderRadius: '3px 3px 0 0',
+                        whiteSpace: 'nowrap',
+                        fontFamily: 'monospace',
+                      }}
+                    >
+                      #{idx + 1} {p.label} {(p.confidence * 100).toFixed(1)}%
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: `${det.boundingBox.x * 100}%`,
+                    top: `${det.boundingBox.y * 100}%`,
+                    width: `${det.boundingBox.width * 100}%`,
+                    height: `${det.boundingBox.height * 100}%`,
+                    border: '2px solid var(--accent)',
+                    boxShadow: '0 0 0 1px rgba(0,0,0,0.6)',
+                    pointerEvents: 'none',
+                  }}
+                >
+                  <span
+                    style={{
+                      position: 'absolute',
+                      bottom: '100%',
+                      left: 0,
+                      background: 'rgba(2,6,12,0.92)',
+                      color: 'var(--accent)',
+                      fontSize: 10,
+                      padding: '2px 5px',
+                      borderRadius: 3,
+                      whiteSpace: 'nowrap',
+                      fontFamily: 'monospace',
+                    }}
+                  >
+                    {det.rawLabel || clsLabel(det.className, language)} {(det.confidence * 100).toFixed(1)}%
+                  </span>
+                </div>
+              )}
+              <div className="row-between" style={{ position: 'absolute', top: 8, left: 8, right: 8, pointerEvents: 'none' }}>
+                <span className="badge b-accent">
+                  {det.isRealModel
+                    ? 'REAL MODEL DETECTION'
+                    : t(meta.category === 'marine-life' ? 'detail.badgeMonitoring' : 'detail.badgeDebrisAnomaly')}
+                </span>
+                <span className="badge b-plain">
+                  {(det.rawLabel || clsLabel(det.className, language)).toUpperCase()} · {pct(det.confidence)}
+                </span>
               </div>
             </div>
 

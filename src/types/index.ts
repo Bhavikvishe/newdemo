@@ -24,7 +24,8 @@ export type DetectionClass =
   | 'cylinder'
   | 'manta'
   | 'airplane'
-  | 'human';
+  | 'human'
+  | 'mine';
 
 export type RiskLevel = 'critical' | 'high' | 'medium' | 'low';
 
@@ -87,6 +88,7 @@ export interface BoundingBox {
 export interface Detection {
   id: string;
   imageId: string;
+  imageUrl?: string;
   className: DetectionClass;
   confidence: number;
   boundingBox: BoundingBox;
@@ -121,6 +123,23 @@ export interface Detection {
   recommended: boolean;
   manualVerificationRequired: boolean;
   source?: 'upload';
+  isRealModel?: boolean;
+  rawLabel?: string;
+  predictions?: Array<{
+    class_id?: number;
+    label: string;
+    confidence: number;
+    bbox: BoundingBox;
+    raw_bbox?: { x1: number; y1: number; x2: number; y2: number };
+  }>;
+  inferenceDetails?: {
+    imgsz?: number;
+    conf?: number;
+    iou?: number;
+    modelPath?: string;
+    processingMs?: number;
+    rawBbox?: { x1: number; y1: number; x2: number; y2: number };
+  };
 }
 
 export interface SonarImage {

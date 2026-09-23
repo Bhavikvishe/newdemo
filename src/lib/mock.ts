@@ -139,6 +139,21 @@ export const CLASS_META: Record<DetectionClass, ClassMeta> = {
     aiModel: 'yolo-best.pt @ conf 0.58',
     description: 'Biometric signature in low depth. Safety/emergency category.',
   },
+  mine: {
+    className: 'mine',
+    i18nKey: 'cls.mine',
+    category: 'safety',
+    color: '#ff3b30',
+    sonarTone: 240,
+    primary: 'recovery-response',
+    escalation: 'marine-operations',
+    hours: 12,
+    equipment: ['EOD ROV', 'Acoustic Neutralizer', 'Safety Perimeter Buoy', 'Bomb Squad Kit'],
+    removal: 'EOD protocol — remote neutralization or safe recovery',
+    riskBase: 'critical',
+    aiModel: 'best.pt (YOLO26s)',
+    description: 'Submerged explosive ordnance or naval mine with spherical/cylindrical contact horn profile.',
+  },
 };
 
 export const CLASS_LIST: DetectionClass[] = [
@@ -149,6 +164,7 @@ export const CLASS_LIST: DetectionClass[] = [
   'manta',
   'airplane',
   'human',
+  'mine',
 ];
 
 export const RISK_ORDER: RiskLevel[] = ['critical', 'high', 'medium', 'low'];
@@ -292,12 +308,12 @@ export function makeDetection(opts: {
   const hours = meta.hours || 24;
   const deadline = toISO(new Date(new Date(iso).getTime() + hours * 3600e3));
 
-  const dimScale = className === 'human' ? 1 : className === 'manta' ? 2.4 : 1;
+  const dimScale = className === 'human' ? 1 : className === 'manta' ? 2.4 : className === 'mine' ? 0.7 : 1;
   const length = +(between(1.4, 24) * dimScale).toFixed(1);
   const width = +(length * between(0.28, 0.5)).toFixed(1);
   const height = +(length * between(0.15, 0.34)).toFixed(1);
 
-  const estWeight = className === 'airplane' ? nint(9000, 30000) : className === 'shipwreck' ? nint(4000, 48000) : className === 'pipeline' ? nint(900, 4200) : className === 'human' ? nint(45, 90) : nint(40, 640);
+  const estWeight = className === 'airplane' ? nint(9000, 30000) : className === 'shipwreck' ? nint(4000, 48000) : className === 'pipeline' ? nint(900, 4200) : className === 'human' ? nint(45, 90) : className === 'mine' ? nint(150, 650) : nint(40, 640);
   const unit = 'kg';
   const wMin = Math.max(10, Math.round(estWeight * between(0.82, 0.95)));
   const wMax = Math.round(estWeight * between(1.05, 1.28));
