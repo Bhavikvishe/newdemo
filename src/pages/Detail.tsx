@@ -81,31 +81,89 @@ export function DetailPage() {
                 </span>
               }
             />
-            <div className="sonimg" style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', background: '#050b14' }}>
-              <img
-                src={frame}
-                alt={t('detail.sonarFrameAlt')}
-                width={640}
-                height={280}
+            <div
+              className="sonimg"
+              style={{
+                position: 'relative',
+                borderRadius: 12,
+                overflow: 'hidden',
+                background: '#050b14',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                minHeight: 280,
+              }}
+            >
+              <div
                 style={{
-                  width: '100%',
-                  maxHeight: 460,
-                  objectFit: 'contain',
-                  display: 'block',
+                  position: 'relative',
+                  display: 'inline-block',
+                  maxWidth: '100%',
+                  lineHeight: 0,
                 }}
-              />
-              {det.predictions && det.predictions.length > 0 ? (
-                det.predictions.map((p, idx) => (
+              >
+                <img
+                  src={frame}
+                  alt={t('detail.sonarFrameAlt')}
+                  style={{
+                    maxWidth: '100%',
+                    maxHeight: '65vh',
+                    width: 'auto',
+                    height: 'auto',
+                    display: 'block',
+                  }}
+                />
+                {det.predictions && det.predictions.length > 0 ? (
+                  det.predictions.map((p, idx) => {
+                    const isNearRight = (p.bbox.x + (p.bbox.width || 0)) > 0.65;
+                    const isNearTop = p.bbox.y < 0.1;
+                    return (
+                      <div
+                        key={idx}
+                        style={{
+                          position: 'absolute',
+                          left: `${p.bbox.x * 100}%`,
+                          top: `${p.bbox.y * 100}%`,
+                          width: `${p.bbox.width * 100}%`,
+                          height: `${p.bbox.height * 100}%`,
+                          border: idx === 0 ? '2.5px solid var(--accent)' : '2px solid rgba(0, 220, 200, 0.8)',
+                          background: idx === 0 ? 'rgba(0, 240, 255, 0.12)' : 'rgba(0, 220, 200, 0.05)',
+                          boxShadow: '0 0 0 1px rgba(0,0,0,0.6)',
+                          pointerEvents: 'none',
+                        }}
+                      >
+                        <span
+                          style={{
+                            position: 'absolute',
+                            bottom: isNearTop ? 'auto' : '100%',
+                            top: isNearTop ? '100%' : 'auto',
+                            left: isNearRight ? 'auto' : 0,
+                            right: isNearRight ? 0 : 'auto',
+                            background: idx === 0 ? 'var(--accent)' : 'rgba(2,6,12,0.92)',
+                            color: idx === 0 ? '#000' : 'var(--accent)',
+                            fontWeight: 700,
+                            fontSize: 10,
+                            padding: '1px 5px',
+                            borderRadius: isNearTop ? '0 0 3px 3px' : '3px 3px 0 0',
+                            whiteSpace: 'nowrap',
+                            fontFamily: 'monospace',
+                            lineHeight: 'normal',
+                          }}
+                        >
+                          #{idx + 1} {p.label} {(p.confidence * 100).toFixed(1)}%
+                        </span>
+                      </div>
+                    );
+                  })
+                ) : (
                   <div
-                    key={idx}
                     style={{
                       position: 'absolute',
-                      left: `${p.bbox.x * 100}%`,
-                      top: `${p.bbox.y * 100}%`,
-                      width: `${p.bbox.width * 100}%`,
-                      height: `${p.bbox.height * 100}%`,
-                      border: idx === 0 ? '2.5px solid var(--accent)' : '2px solid rgba(0, 220, 200, 0.8)',
-                      background: idx === 0 ? 'rgba(0, 240, 255, 0.12)' : 'rgba(0, 220, 200, 0.05)',
+                      left: `${det.boundingBox.x * 100}%`,
+                      top: `${det.boundingBox.y * 100}%`,
+                      width: `${det.boundingBox.width * 100}%`,
+                      height: `${det.boundingBox.height * 100}%`,
+                      border: '2px solid var(--accent)',
                       boxShadow: '0 0 0 1px rgba(0,0,0,0.6)',
                       pointerEvents: 'none',
                     }}
@@ -113,54 +171,27 @@ export function DetailPage() {
                     <span
                       style={{
                         position: 'absolute',
-                        bottom: '100%',
-                        left: 0,
-                        background: idx === 0 ? 'var(--accent)' : 'rgba(2,6,12,0.92)',
-                        color: idx === 0 ? '#000' : 'var(--accent)',
-                        fontWeight: 700,
+                        bottom: det.boundingBox.y < 0.1 ? 'auto' : '100%',
+                        top: det.boundingBox.y < 0.1 ? '100%' : 'auto',
+                        left: (det.boundingBox.x + det.boundingBox.width) > 0.65 ? 'auto' : 0,
+                        right: (det.boundingBox.x + det.boundingBox.width) > 0.65 ? 0 : 'auto',
+                        background: 'rgba(2,6,12,0.92)',
+                        color: 'var(--accent)',
                         fontSize: 10,
-                        padding: '1px 5px',
-                        borderRadius: '3px 3px 0 0',
+                        padding: '2px 5px',
+                        borderRadius: det.boundingBox.y < 0.1 ? '0 0 3px 3px' : 3,
                         whiteSpace: 'nowrap',
                         fontFamily: 'monospace',
+                        lineHeight: 'normal',
                       }}
                     >
-                      #{idx + 1} {p.label} {(p.confidence * 100).toFixed(1)}%
+                      {det.rawLabel || clsLabel(det.className, language)} {(det.confidence * 100).toFixed(1)}%
                     </span>
                   </div>
-                ))
-              ) : (
-                <div
-                  style={{
-                    position: 'absolute',
-                    left: `${det.boundingBox.x * 100}%`,
-                    top: `${det.boundingBox.y * 100}%`,
-                    width: `${det.boundingBox.width * 100}%`,
-                    height: `${det.boundingBox.height * 100}%`,
-                    border: '2px solid var(--accent)',
-                    boxShadow: '0 0 0 1px rgba(0,0,0,0.6)',
-                    pointerEvents: 'none',
-                  }}
-                >
-                  <span
-                    style={{
-                      position: 'absolute',
-                      bottom: '100%',
-                      left: 0,
-                      background: 'rgba(2,6,12,0.92)',
-                      color: 'var(--accent)',
-                      fontSize: 10,
-                      padding: '2px 5px',
-                      borderRadius: 3,
-                      whiteSpace: 'nowrap',
-                      fontFamily: 'monospace',
-                    }}
-                  >
-                    {det.rawLabel || clsLabel(det.className, language)} {(det.confidence * 100).toFixed(1)}%
-                  </span>
-                </div>
-              )}
-              <div className="row-between" style={{ position: 'absolute', top: 8, left: 8, right: 8, pointerEvents: 'none' }}>
+                )}
+              </div>
+
+              <div className="row-between" style={{ position: 'absolute', top: 8, left: 8, right: 8, pointerEvents: 'none', zIndex: 10 }}>
                 <span className="badge b-accent">
                   {det.isRealModel
                     ? 'REAL MODEL DETECTION'
@@ -171,6 +202,32 @@ export function DetailPage() {
                 </span>
               </div>
             </div>
+
+            {det.predictions && det.predictions.length > 1 && (
+              <div style={{ marginTop: 12, padding: '10px 12px', background: 'rgba(0, 240, 255, 0.04)', borderRadius: 8, border: '1px solid rgba(0, 240, 255, 0.15)' }}>
+                <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.05em', color: 'var(--accent)', textTransform: 'uppercase', marginBottom: 6 }}>
+                  Detected Objects ({det.predictions.length})
+                </div>
+                <div className="row wrap" style={{ gap: 6 }}>
+                  {det.predictions.map((p, idx) => (
+                    <span
+                      key={idx}
+                      style={{
+                        padding: '3px 8px',
+                        borderRadius: 4,
+                        fontSize: 11,
+                        fontFamily: 'monospace',
+                        background: 'rgba(2, 6, 12, 0.8)',
+                        border: '1px solid rgba(0, 220, 200, 0.4)',
+                        color: 'var(--ink-1)',
+                      }}
+                    >
+                      #{idx + 1} <b>{p.label}</b> · {(p.confidence * 100).toFixed(1)}%
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {isHuman && (
               <div className="card" style={{ marginTop: 12, padding: 12, borderColor: 'var(--critical)', background: 'var(--critical-dim)', color: 'var(--critical)', fontSize: 13 }}>

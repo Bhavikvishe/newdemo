@@ -397,81 +397,105 @@ export function DetectionPage() {
                 }
               />
 
-              <div className="sonimg" style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', marginBottom: 14 }}>
+              <div
+                className="sonimg"
+                style={{
+                  position: 'relative',
+                  borderRadius: 12,
+                  overflow: 'hidden',
+                  marginBottom: 14,
+                  background: '#050b14',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  minHeight: 220,
+                }}
+              >
                 {frame ? (
-                  <img
-                    src={frame}
-                    alt={t('det.sonarFrame')}
-                    width={720}
-                    height={220}
-                    style={{ width: '100%', height: 'auto', display: 'block' }}
-                  />
+                  <div style={{ position: 'relative', display: 'inline-block', maxWidth: '100%', lineHeight: 0 }}>
+                    <img
+                      src={frame}
+                      alt={t('det.sonarFrame')}
+                      style={{
+                        maxWidth: '100%',
+                        maxHeight: '65vh',
+                        width: 'auto',
+                        height: 'auto',
+                        display: 'block',
+                      }}
+                    />
+
+                    {/* Overlaid Real Bounding Boxes for ALL detections */}
+                    {allDetections.length > 0 ? (
+                      allDetections.map((p, idx) => {
+                        const isSelected = idx === selectedPredIdx;
+                        const isNearRight = (p.bbox.x + (p.bbox.width || 0)) > 0.65;
+                        const isNearTop = p.bbox.y < 0.1;
+                        return (
+                          <div
+                            key={idx}
+                            onClick={() => selectPrediction(idx)}
+                            style={{
+                              position: 'absolute',
+                              left: `${p.bbox.x * 100}%`,
+                              top: `${p.bbox.y * 100}%`,
+                              width: `${p.bbox.width * 100}%`,
+                              height: `${p.bbox.height * 100}%`,
+                              border: isSelected ? '2.5px solid var(--accent)' : '2px solid rgba(0, 220, 200, 0.75)',
+                              background: isSelected ? 'rgba(0, 240, 255, 0.12)' : 'rgba(0, 220, 200, 0.05)',
+                              boxShadow: isSelected
+                                ? '0 0 12px rgba(0, 240, 255, 0.5), 0 0 0 1px rgba(0,0,0,0.8)'
+                                : '0 0 0 1px rgba(0,0,0,0.6)',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease',
+                              zIndex: isSelected ? 10 : 3,
+                            }}
+                          >
+                            <span
+                              style={{
+                                position: 'absolute',
+                                bottom: isNearTop ? 'auto' : '100%',
+                                top: isNearTop ? '100%' : 'auto',
+                                left: isNearRight ? 'auto' : 0,
+                                right: isNearRight ? 0 : 'auto',
+                                background: isSelected ? 'var(--accent)' : 'rgba(2,6,12,0.92)',
+                                color: isSelected ? '#000' : 'var(--accent)',
+                                fontWeight: 700,
+                                fontSize: 10,
+                                padding: '1px 5px',
+                                borderRadius: isNearTop ? '0 0 3px 3px' : '3px 3px 0 0',
+                                whiteSpace: 'nowrap',
+                                fontFamily: 'monospace',
+                                lineHeight: 'normal',
+                                boxShadow: '0 2px 4px rgba(0,0,0,0.5)',
+                              }}
+                            >
+                              #{idx + 1} {p.label} {(p.confidence * 100).toFixed(1)}%
+                            </span>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      result && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            left: `${result.boundingBox.x * 100}%`,
+                            top: `${result.boundingBox.y * 100}%`,
+                            width: `${result.boundingBox.width * 100}%`,
+                            height: `${result.boundingBox.height * 100}%`,
+                            border: '2px solid var(--accent)',
+                            boxShadow: '0 0 0 1px rgba(0,0,0,0.6)',
+                            pointerEvents: 'none',
+                          }}
+                        />
+                      )
+                    )}
+                  </div>
                 ) : (
                   <div style={{ height: 180, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--ink-4)', color: 'var(--ink-2)' }}>
                     No visual frame
                   </div>
-                )}
-
-                {/* Overlaid Real Bounding Boxes for ALL detections */}
-                {allDetections.length > 0 ? (
-                  allDetections.map((p, idx) => {
-                    const isSelected = idx === selectedPredIdx;
-                    return (
-                      <div
-                        key={idx}
-                        onClick={() => selectPrediction(idx)}
-                        style={{
-                          position: 'absolute',
-                          left: `${p.bbox.x * 100}%`,
-                          top: `${p.bbox.y * 100}%`,
-                          width: `${p.bbox.width * 100}%`,
-                          height: `${p.bbox.height * 100}%`,
-                          border: isSelected ? '2.5px solid var(--accent)' : '2px solid rgba(0, 220, 200, 0.75)',
-                          background: isSelected ? 'rgba(0, 240, 255, 0.12)' : 'rgba(0, 220, 200, 0.05)',
-                          boxShadow: isSelected
-                            ? '0 0 12px rgba(0, 240, 255, 0.5), 0 0 0 1px rgba(0,0,0,0.8)'
-                            : '0 0 0 1px rgba(0,0,0,0.6)',
-                          cursor: 'pointer',
-                          transition: 'all 0.15s ease',
-                          zIndex: isSelected ? 10 : 3,
-                        }}
-                      >
-                        <span
-                          style={{
-                            position: 'absolute',
-                            bottom: '100%',
-                            left: 0,
-                            background: isSelected ? 'var(--accent)' : 'rgba(2,6,12,0.92)',
-                            color: isSelected ? '#000' : 'var(--accent)',
-                            fontWeight: 700,
-                            fontSize: 10,
-                            padding: '1px 5px',
-                            borderRadius: '3px 3px 0 0',
-                            whiteSpace: 'nowrap',
-                            fontFamily: 'monospace',
-                            boxShadow: '0 2px 4px rgba(0,0,0,0.5)',
-                          }}
-                        >
-                          #{idx + 1} {p.label} {(p.confidence * 100).toFixed(1)}%
-                        </span>
-                      </div>
-                    );
-                  })
-                ) : (
-                  result && (
-                    <div
-                      style={{
-                        position: 'absolute',
-                        left: `${result.boundingBox.x * 100}%`,
-                        top: `${result.boundingBox.y * 100}%`,
-                        width: `${result.boundingBox.width * 100}%`,
-                        height: `${result.boundingBox.height * 100}%`,
-                        border: '2px solid var(--accent)',
-                        boxShadow: '0 0 0 1px rgba(0,0,0,0.6)',
-                        pointerEvents: 'none',
-                      }}
-                    />
-                  )
                 )}
 
                 {done && result && (

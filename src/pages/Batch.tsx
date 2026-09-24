@@ -739,26 +739,81 @@ export function BatchPage() {
                   </div>
 
                   {/* Real Image Preview & All Real Bounding Boxes */}
-                  <div className="sonimg" style={{ position: 'relative', borderRadius: 9, overflow: 'hidden' }}>
+                  <div
+                    className="sonimg"
+                    style={{
+                      position: 'relative',
+                      borderRadius: 9,
+                      overflow: 'hidden',
+                      height: 140,
+                      background: '#050b14',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
                     {it.previewUrl ? (
-                      <img
-                        src={it.previewUrl}
-                        alt={it.filename}
-                        width={240}
-                        height={136}
-                        style={{
-                          width: '100%',
-                          height: '136px',
-                          objectFit: 'cover',
-                          display: 'block',
-                          filter: it.status === 'failed' ? 'grayscale(0.6) opacity(0.55)' : undefined,
-                        }}
-                      />
+                      <div style={{ position: 'relative', display: 'inline-block', lineHeight: 0, maxWidth: '100%', maxHeight: 140 }}>
+                        <img
+                          src={it.previewUrl}
+                          alt={it.filename}
+                          style={{
+                            maxWidth: '100%',
+                            maxHeight: 140,
+                            width: 'auto',
+                            height: 'auto',
+                            display: 'block',
+                            filter: it.status === 'failed' ? 'grayscale(0.6) opacity(0.55)' : undefined,
+                          }}
+                        />
+
+                        {/* Overlay real bounding boxes for all detections */}
+                        {it.status === 'completed' &&
+                          it.predictions.map((p, idx) => {
+                            const isNearRight = (p.bbox.x + (p.bbox.width || 0)) > 0.65;
+                            const isNearTop = p.bbox.y < 0.12;
+                            return (
+                              <div
+                                key={idx}
+                                style={{
+                                  position: 'absolute',
+                                  left: `${p.bbox.x * 100}%`,
+                                  top: `${p.bbox.y * 100}%`,
+                                  width: `${p.bbox.width * 100}%`,
+                                  height: `${p.bbox.height * 100}%`,
+                                  border: '2px solid var(--accent)',
+                                  boxShadow: '0 0 0 1px rgba(0,0,0,0.6)',
+                                  pointerEvents: 'none',
+                                }}
+                              >
+                                <span
+                                  style={{
+                                    position: 'absolute',
+                                    bottom: isNearTop ? 'auto' : '100%',
+                                    top: isNearTop ? '100%' : 'auto',
+                                    left: isNearRight ? 'auto' : 0,
+                                    right: isNearRight ? 0 : 'auto',
+                                    background: 'rgba(2,6,12,0.88)',
+                                    color: 'var(--accent)',
+                                    fontSize: 9,
+                                    padding: '1px 3px',
+                                    borderRadius: isNearTop ? '0 0 2px 2px' : 2,
+                                    whiteSpace: 'nowrap',
+                                    fontFamily: 'monospace',
+                                    lineHeight: 'normal',
+                                  }}
+                                >
+                                  {p.label} {(p.confidence * 100).toFixed(0)}%
+                                </span>
+                              </div>
+                            );
+                          })}
+                      </div>
                     ) : (
                       <div
                         style={{
                           width: '100%',
-                          height: '136px',
+                          height: '140px',
                           display: 'flex',
                           alignItems: 'center',
                           justifyContent: 'center',
@@ -770,41 +825,6 @@ export function BatchPage() {
                         {it.filename}
                       </div>
                     )}
-
-                    {/* Overlay real bounding boxes for all detections */}
-                    {it.status === 'completed' &&
-                      it.predictions.map((p, idx) => (
-                        <div
-                          key={idx}
-                          style={{
-                            position: 'absolute',
-                            left: `${p.bbox.x * 100}%`,
-                            top: `${p.bbox.y * 100}%`,
-                            width: `${p.bbox.width * 100}%`,
-                            height: `${p.bbox.height * 100}%`,
-                            border: '2px solid var(--accent)',
-                            boxShadow: '0 0 0 1px rgba(0,0,0,0.6)',
-                            pointerEvents: 'none',
-                          }}
-                        >
-                          <span
-                            style={{
-                              position: 'absolute',
-                              bottom: '100%',
-                              left: 0,
-                              background: 'rgba(2,6,12,0.88)',
-                              color: 'var(--accent)',
-                              fontSize: 9,
-                              padding: '1px 3px',
-                              borderRadius: 2,
-                              whiteSpace: 'nowrap',
-                              fontFamily: 'monospace',
-                            }}
-                          >
-                            {p.label} {(p.confidence * 100).toFixed(0)}%
-                          </span>
-                        </div>
-                      ))}
 
                     {/* Processing Spinner Overlay */}
                     {it.status === 'processing' && (
