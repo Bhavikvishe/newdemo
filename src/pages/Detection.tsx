@@ -3,12 +3,13 @@ import type { DragEvent } from 'react';
 import { useStore } from '../lib/store';
 import { makeT } from '../lib/i18n';
 import { CLASS_META, fmtCoordinate, fmtSize, fmtWeight, makeDetectionFromFile, pct } from '../lib/mock';
+import type { DetectionReportSource } from '../lib/mock';
 import { fetchPredictions, mapClass, fileToDataUrl, setCachedImage } from '../lib/detect';
 import type { DetectDebugInfo, ModelPrediction } from '../lib/detect';
 import { WeatherReport } from '../components/Weather';
 import { categoryLabel, clsLabel } from '../lib/labels';
 import { renderFrame } from '../lib/sonar';
-import { PageHead, Card, CardHead, Button, RiskBadge, Tag, Kv } from '../lib/ui';
+import { PageHead, Card, CardHead, Button, RiskBadge, Tag, Kv, DetectionReportActions } from '../lib/ui';
 import { Link } from '../lib/router';
 import { IconCheck, IconUpload, IconScan, IconRefresh, IconDoc, IconAlert, IconInfo, IconShield } from '../components/Icons';
 import type { Detection, DetectionClass } from '../types';
@@ -300,6 +301,28 @@ export function DetectionPage() {
   }, [active, done, processingIdx]);
 
   const meta = result ? CLASS_META[result.className] : null;
+  const reportSource: DetectionReportSource | null = done && result
+    ? {
+        id: result.id,
+        imageId: currentFile?.name ?? result.imageId,
+        createdAt: result.createdAt,
+        predictions: allDetections.length > 0 ? allDetections : result.predictions ?? [],
+        detection: result,
+        status: 'completed',
+        selectedIndex: selectedPredIdx,
+        confidenceThreshold: confThreshold,
+      }
+    : null;
+  const noObjectReportSource: DetectionReportSource | null = noObjects && currentFile
+    ? {
+        id: currentFile.name,
+        imageId: currentFile.name,
+        createdAt: new Date().toISOString(),
+        predictions: [],
+        status: 'completed',
+        confidenceThreshold: confThreshold,
+      }
+    : null;
 
   return (
     <div>
@@ -640,7 +663,8 @@ export function DetectionPage() {
                   The model did not find any objects in this frame matching the trained classes at threshold {confThreshold.toFixed(2)}.
                   Real model mode never fabricates fake detections.
                 </p>
-                <div className="row wrap center" style={{ gap: 8, justifyContent: 'center' }}>
+                {noObjectReportSource && <DetectionReportActions source={noObjectReportSource} />}
+                <div className="row wrap center" style={{ gap: 8, justifyContent: 'center', marginTop: 14 }}>
                   <span className="tiny upper muted">Try lowering threshold:</span>
                   {[0.10, 0.15, 0.20].map((th) => (
                     <button
@@ -818,13 +842,14 @@ export function DetectionPage() {
                   </div>
                 </div>
 
-                <div className="row" style={{ gap: 10, marginTop: 16 }}>
+                <div className="row wrap" style={{ gap: 10, marginTop: 16 }}>
                   <Link to={`detail/${result.id}`} className="btn btn-primary btn-sm">
                     <IconDoc size={14} /> {t('det.inspectFull')}
                   </Link>
                   <Button variant="secondary" onClick={reset} style={{ padding: '6px 12px', fontSize: 12 }}>
                     <IconRefresh size={14} /> {t('det.runAnother')}
                   </Button>
+                  {reportSource && <DetectionReportActions source={reportSource} />}
                 </div>
               </Card>
 

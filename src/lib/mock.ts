@@ -14,6 +14,8 @@ import type {
   Language,
 } from '../types';
 
+import { jsPDF } from 'jspdf';
+import type { ModelPrediction } from './detect';
 import { makeT } from './i18n';
 
 export type Category = 'debris' | 'anomaly' | 'marine-life' | 'infrastructure' | 'safety';
@@ -652,13 +654,549 @@ export function toJSON(data: unknown): string {
   return JSON.stringify(data, null, 2);
 }
 
-export function downloadPDF(html: string) {
-  const win = window.open('', '_blank');
-  if (!win) return;
-  win.document.open();
-  win.document.write(html);
-  win.document.close();
-  win.print();
+export interface ReportPdfData {
+  id: string;
+  title: string;
+  window: string;
+  department: string;
+  generatedAt: string;
+  metadata: string[];
+  stats: [string, string][];
+  findings: string[];
+  columns: string[];
+  rows: Record<string, string>[];
+  labels: {
+    keyMetrics: string;
+    findings: string;
+    dataTable: string;
+  };
+}
+
+export interface BatchReportItem {
+  filename: string;
+  path?: string;
+  status: string;
+  predictions: ModelPrediction[];
+  error?: string;
+}
+
+export function downloadReportPDF(data: ReportPdfData) {
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const margin = 14;
+  const contentWidth = pageWidth - margin * 2;
+  const bottom = pageHeight - 16;
+  const ink = [26, 42, 56] as const;
+  const muted = [92, 106, 118] as const;
+  const accent = [0, 145, 161] as const;
+  const border = [205, 216, 223] as const;
+  const lightFill = [244, 248, 249] as const;
+  const headerFill = [225, 242, 243] as const;
+  const lineHeight = 4.5;
+  let y = margin;
+
+  doc.setProperties({
+    title: data.title,
+    subject: data.labels.findings,
+    author: 'OCEONIX',
+    creator: 'OCEONIX',
+  });
+
+  const wrap = (value: string, width: number) => {
+    const text = value || ' ';
+    const lines = doc.splitTextToSize(text, width) as string[];
+    return lines.length ? lines.map(String) : [text];
+  };
+
+  const addPage = () => {
+    doc.addPage();
+    y = margin;
+  };
+
+  const ensureSpace = (height: number) => {
+    if (y + height > bottom) addPage();
+  };
+
+  const drawSection = (label: string) => {
+    ensureSpace(15);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(11);
+    doc.setTextColor(accent[0], accent[1], accent[2]);
+    doc.text(wrap(label, contentWidth), margin, y + 4);
+    y += 9;
+    doc.setDrawColor(border[0], border[1], border[2]);
+    doc.setLineWidth(0.25);
+    doc.line(margin, y, margin + contentWidth, y);
+    y += 4;
+  };
+
+  const drawWrappedText = (value: string, width: number, size: number, color: readonly [number, number, number]) => {
+    const lines = wrap(value, width);
+    ensureSpace(lines.length * lineHeight + 2);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(size);
+    doc.setTextColor(color[0], color[1], color[2]);
+    doc.text(lines, margin, y + size * 0.35);
+    y += lines.length * lineHeight + 3;
+  };
+
+  const drawTitle = () => {
+    const lines = wrap(data.title, contentWidth);
+    ensureSpace(lines.length * 7 + 9);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(18);
+    doc.setTextColor(ink[0], ink[1], ink[2]);
+    doc.text(lines, margin, y + 5);
+    y += lines.length * 7 + 2;
+    doc.setDrawColor(accent[0], accent[1], accent[2]);
+    doc.setLineWidth(0.8);
+    doc.line(margin, y, margin + contentWidth, y);
+    y += 6;
+  };
+
+  const drawMetadata = () => {
+    const lines = data.metadata.flatMap((line) => wrap(line, contentWidth));
+    ensureSpace(lines.length * lineHeight + 4);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(muted[0], muted[1], muted[2]);
+    doc.text(lines, margin, y + 3);
+    y += lines.length * lineHeight + 5;
+  };
+
+  const drawStats = () => {
+    const labelWidth = contentWidth * 0.62;
+    const valueWidth = contentWidth - labelWidth;
+    data.stats.forEach(([label, value], index) => {
+      const labelLines = wrap(label, labelWidth - 6);
+      const valueLines = wrap(value, valueWidth - 6);
+      const rowHeight = Math.max(labelLines.length, valueLines.length) * lineHeight + 5;
+      ensureSpace(rowHeight);
+      if (index % 2 === 0) {
+        doc.setFillColor(lightFill[0], lightFill[1], lightFill[2]);
+        doc.rect(margin, y, contentWidth, rowHeight, 'F');
+      }
+      doc.setDrawColor(border[0], border[1], border[2]);
+      doc.rect(margin, y, contentWidth, rowHeight, 'S');
+      doc.line(margin + labelWidth, y, margin + labelWidth, y + rowHeight);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(muted[0], muted[1], muted[2]);
+      doc.text(labelLines, margin + 3, y + 5);
+      doc.setFont('helvetica', 'bold');
+      doc.setTextColor(ink[0], ink[1], ink[2]);
+      doc.text(valueLines, margin + labelWidth + 3, y + 5);
+      y += rowHeight + 1;
+    });
+    y += 4;
+  };
+
+  const drawFindings = () => {
+    data.findings.forEach((finding) => {
+      drawWrappedText(finding, contentWidth, 9.5, ink);
+    });
+    y += 4;
+  };
+
+  const drawTable = () => {
+    if (!data.columns.length) return;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    const rawWidths = data.columns.map((column) => {
+      let width = doc.getTextWidth(column) + 7;
+      data.rows.forEach((row) => {
+        width = Math.max(width, doc.getTextWidth(row[column] ?? '') + 7);
+      });
+      return Math.max(18, width);
+    });
+    const totalWidth = rawWidths.reduce((sum, width) => sum + width, 0);
+    const widths = rawWidths.map((width) => (width / totalWidth) * contentWidth);
+
+    const drawHeader = () => {
+      const cellLines = data.columns.map((column, index) => wrap(column, widths[index] - 6));
+      const rowHeight = Math.max(7, Math.max(...cellLines.map((lines) => lines.length)) * lineHeight + 5);
+      ensureSpace(rowHeight);
+      doc.setFillColor(headerFill[0], headerFill[1], headerFill[2]);
+      doc.rect(margin, y, contentWidth, rowHeight, 'F');
+      doc.setDrawColor(border[0], border[1], border[2]);
+      doc.rect(margin, y, contentWidth, rowHeight, 'S');
+      let x = margin;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8.5);
+      doc.setTextColor(ink[0], ink[1], ink[2]);
+      data.columns.forEach((_, index) => {
+        if (index > 0) doc.line(x, y, x, y + rowHeight);
+        doc.text(cellLines[index], x + 3, y + 4.5);
+        x += widths[index];
+      });
+      y += rowHeight;
+    };
+
+    drawHeader();
+    data.rows.forEach((row, rowIndex) => {
+      const cellLines = data.columns.map((column, index) => wrap(row[column] ?? '', widths[index] - 6));
+      const rowHeight = Math.max(7, Math.max(...cellLines.map((lines) => lines.length)) * lineHeight + 5);
+      if (y + rowHeight > bottom) {
+        addPage();
+        drawHeader();
+      }
+      if (rowIndex % 2 === 1) {
+        doc.setFillColor(lightFill[0], lightFill[1], lightFill[2]);
+        doc.rect(margin, y, contentWidth, rowHeight, 'F');
+      }
+      doc.setDrawColor(border[0], border[1], border[2]);
+      doc.rect(margin, y, contentWidth, rowHeight, 'S');
+      let x = margin;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      doc.setTextColor(ink[0], ink[1], ink[2]);
+      data.columns.forEach((_, index) => {
+        if (index > 0) doc.line(x, y, x, y + rowHeight);
+        doc.text(cellLines[index], x + 3, y + 4.5);
+        x += widths[index];
+      });
+      y += rowHeight;
+    });
+  };
+
+  drawTitle();
+  drawMetadata();
+  drawSection(data.labels.keyMetrics);
+  drawStats();
+  drawSection(data.labels.findings);
+  drawFindings();
+  drawSection(data.labels.dataTable);
+  drawTable();
+
+  const pageCount = doc.getNumberOfPages();
+  for (let page = 1; page <= pageCount; page += 1) {
+    doc.setPage(page);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(muted[0], muted[1], muted[2]);
+    doc.text(`${page} / ${pageCount}`, pageWidth - margin, pageHeight - 7, { align: 'right' });
+  }
+
+  doc.save(`${data.id}.pdf`);
+}
+
+export function downloadBatchReportPDF(items: BatchReportItem[], language: Language = 'en'): string {
+  const t = makeT(language);
+  const completedItems = items.filter((item) => item.status === 'completed');
+  const failedItems = items.filter((item) => item.status === 'failed');
+  const predictions = completedItems.flatMap((item) => item.predictions);
+  const averageConfidence = predictions.length > 0
+    ? predictions.reduce((sum, prediction) => sum + prediction.confidence, 0) / predictions.length
+    : 0;
+  const generatedAt = new Date().toISOString();
+  const fileName = 'oceonix-real-batch';
+  const columns = ['Image', '#', 'Label', 'Confidence', 'BBox (x,y,w,h)', 'Status'];
+  const rows = items.flatMap((item) => {
+    const image = item.path ?? item.filename;
+    if (item.status === 'completed' && item.predictions.length > 0) {
+      return item.predictions.map((prediction, index) => ({
+        Image: image,
+        '#': String(index + 1),
+        Label: prediction.label,
+        Confidence: pct(prediction.confidence),
+        'BBox (x,y,w,h)': `${prediction.bbox.x.toFixed(4)}, ${prediction.bbox.y.toFixed(4)}, ${prediction.bbox.width.toFixed(4)}, ${prediction.bbox.height.toFixed(4)}`,
+        Status: item.status,
+      }));
+    }
+    return [{
+      Image: image,
+      '#': '—',
+      Label: item.status === 'failed' ? item.error || 'error' : 'No highlights',
+      Confidence: '—',
+      'BBox (x,y,w,h)': '—',
+      Status: item.status,
+    }];
+  });
+  const findings = [
+    `${items.length} image(s) included in this batch export.`,
+    `${completedItems.length} completed and ${failedItems.length} failed.`,
+    `${predictions.length} detection highlight(s) recorded across the batch.`,
+    predictions.length > 0 ? `Average highlight confidence: ${pct(averageConfidence)}.` : 'No detection highlights were recorded.',
+  ];
+  const pdfData: ReportPdfData = {
+    id: fileName,
+    title: 'Batch detection report',
+    window: 'Batch analysis',
+    department: 'Batch processing',
+    generatedAt,
+    metadata: [
+      t('rpt.pdfGenerated', { date: fmtDT(generatedAt) }),
+      `Images: ${items.length}`,
+      `Completed: ${completedItems.length}`,
+      `Failed: ${failedItems.length}`,
+    ],
+    stats: [
+      ['Images', String(items.length)],
+      ['Completed images', String(completedItems.length)],
+      ['Failed images', String(failedItems.length)],
+      ['Detection highlights', String(predictions.length)],
+      ['Average confidence', predictions.length > 0 ? pct(averageConfidence) : '—'],
+    ],
+    findings,
+    columns,
+    rows,
+    labels: {
+      keyMetrics: t('rpt.pdfKeyMetrics'),
+      findings: t('rpt.pdfFindings'),
+      dataTable: t('rpt.pdfDataTable'),
+    },
+  };
+  downloadReportPDF(pdfData);
+  return `${fileName}.pdf`;
+}
+
+export type DetectionReportFormat = 'json' | 'csv' | 'pdf';
+
+export interface DetectionReportSource {
+  id: string;
+  imageId: string;
+  createdAt: string;
+  predictions: ModelPrediction[];
+  detection?: Detection;
+  status?: string;
+  selectedIndex?: number;
+  confidenceThreshold?: number;
+  error?: string;
+}
+
+function detectionReportPredictions(source: DetectionReportSource): ModelPrediction[] {
+  if (source.predictions?.length) return source.predictions;
+  if (!source.detection) return [];
+  const { x, y, width, height } = source.detection.boundingBox;
+  return [
+    {
+      label: source.detection.rawLabel ?? source.detection.className,
+      confidence: source.detection.confidence,
+      bbox: { x, y, width, height },
+    },
+  ];
+}
+
+function detectionReportFileName(source: DetectionReportSource): string {
+  const rawName = (source.imageId || source.id).split(/[\\/]/).pop() ?? '';
+  const withoutExtension = rawName.replace(/\.[^/.]+$/, '');
+  const safeName = withoutExtension
+    .replace(/[^a-z0-9._-]+/gi, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+  return `detection-report-${safeName || 'image'}`;
+}
+
+export function downloadDetectionReport(source: DetectionReportSource, format: DetectionReportFormat, language: Language = 'en'): string {
+  const predictions = detectionReportPredictions(source);
+  const selectedIndex = predictions.length > 0
+    ? Math.min(Math.max(source.selectedIndex ?? 0, 0), predictions.length - 1)
+    : -1;
+  const selected = selectedIndex >= 0 ? predictions[selectedIndex] : undefined;
+  const status = source.status ?? 'completed';
+  const averageConfidence = predictions.length > 0
+    ? predictions.reduce((sum, prediction) => sum + prediction.confidence, 0) / predictions.length
+    : 0;
+  const highestConfidence = predictions.length > 0
+    ? Math.max(...predictions.map((prediction) => prediction.confidence))
+    : 0;
+  const primary = source.detection;
+  const fileName = detectionReportFileName(source);
+  const generatedAt = new Date().toISOString();
+  const t = makeT(language);
+  const highlights = predictions.map((prediction, index) => ({
+    index: index + 1,
+    selected: index === selectedIndex,
+    class_id: prediction.class_id ?? null,
+    label: prediction.label,
+    confidence: prediction.confidence,
+    confidence_percent: Number((prediction.confidence * 100).toFixed(2)),
+    bbox: {
+      x: prediction.bbox.x,
+      y: prediction.bbox.y,
+      width: prediction.bbox.width,
+      height: prediction.bbox.height,
+    },
+    raw_bbox: prediction.raw_bbox ?? null,
+  }));
+  const primaryClass = primary?.rawLabel ?? primary?.className ?? selected?.label ?? '—';
+  const primaryRisk = primary?.riskLevel ?? '—';
+  const departmentName = primary ? deptById(primary.department).name : '—';
+  const position = primary ? fmtCoordinate(primary.gps.latitude, primary.gps.longitude) : '—';
+  const responseDeadline = primary?.responseDeadline ? fmtDT(primary.responseDeadline) : '—';
+  const jsonData = {
+    report_type: 'detection_analysis',
+    report_id: fileName,
+    detection_id: source.id,
+    image: source.imageId,
+    analyzed_at: source.createdAt,
+    generated_at: generatedAt,
+    status,
+    object_count: predictions.length,
+    selected_detection_index: selectedIndex >= 0 ? selectedIndex + 1 : null,
+    selected_detection: selected ? highlights[selectedIndex] : null,
+    confidence_threshold: source.confidenceThreshold ?? null,
+    highlights,
+    detection: primary
+      ? {
+          class_name: primary.className,
+          raw_label: primary.rawLabel ?? null,
+          confidence: primary.confidence,
+          risk_level: primary.riskLevel,
+          risk_score: primary.riskScore,
+          latitude: primary.gps.latitude,
+          longitude: primary.gps.longitude,
+          gps_accuracy: primary.gps.accuracy ?? null,
+          estimated_size: primary.estimatedSize,
+          estimated_weight: primary.estimatedWeight,
+          department: primary.department,
+          department_name: deptById(primary.department).name,
+          response_deadline: primary.responseDeadline,
+          removal_method: primary.removalMethod,
+          recommended_equipment: primary.recommendedEquipment,
+          notes: primary.notes,
+        }
+      : null,
+    error: source.error ?? null,
+  };
+  const baseRow: Record<string, string | number | undefined> = {
+    detection_id: source.id,
+    image: source.imageId,
+    analyzed_at: source.createdAt,
+    status,
+    object_count: predictions.length,
+    selected_detection_index: selectedIndex >= 0 ? selectedIndex + 1 : undefined,
+    confidence_threshold: source.confidenceThreshold,
+    primary_class: primary?.className,
+    primary_risk: primary?.riskLevel,
+    risk_score: primary?.riskScore,
+    latitude: primary?.gps.latitude,
+    longitude: primary?.gps.longitude,
+    gps_accuracy: primary?.gps.accuracy,
+    estimated_size: primary ? fmtSize(primary.estimatedSize) : undefined,
+    estimated_weight: primary ? fmtWeight(primary.estimatedWeight) : undefined,
+    department: primary?.department,
+    department_name: primary ? deptById(primary.department).name : undefined,
+    response_deadline: primary?.responseDeadline,
+    removal_method: primary?.removalMethod,
+    notes: primary?.notes,
+    error: source.error,
+  };
+  const rows: Record<string, string | number | undefined>[] = predictions.length > 0
+    ? predictions.map((prediction, index) => ({
+        ...baseRow,
+        highlight_index: index + 1,
+        selected: index === selectedIndex ? 'yes' : 'no',
+        class_id: prediction.class_id,
+        label: prediction.label,
+        confidence: prediction.confidence.toFixed(4),
+        confidence_percent: (prediction.confidence * 100).toFixed(2),
+        x: prediction.bbox.x.toFixed(6),
+        y: prediction.bbox.y.toFixed(6),
+        width: prediction.bbox.width.toFixed(6),
+        height: prediction.bbox.height.toFixed(6),
+        x2: (prediction.bbox.x + prediction.bbox.width).toFixed(6),
+        y2: (prediction.bbox.y + prediction.bbox.height).toFixed(6),
+        raw_x1: prediction.raw_bbox?.x1,
+        raw_y1: prediction.raw_bbox?.y1,
+        raw_x2: prediction.raw_bbox?.x2,
+        raw_y2: prediction.raw_bbox?.y2,
+      }))
+    : [{
+        ...baseRow,
+        highlight_index: undefined,
+        selected: undefined,
+        class_id: undefined,
+        label: undefined,
+        confidence: undefined,
+        confidence_percent: undefined,
+        x: undefined,
+        y: undefined,
+        width: undefined,
+        height: undefined,
+        x2: undefined,
+        y2: undefined,
+        raw_x1: undefined,
+        raw_y1: undefined,
+        raw_x2: undefined,
+        raw_y2: undefined,
+      }];
+  const metadata = [
+    t('rpt.pdfId', { id: source.id }),
+    `Image: ${source.imageId}`,
+    t('rpt.pdfGenerated', { date: fmtDT(generatedAt) }),
+    `Status: ${status}`,
+  ];
+  const stats: [string, string][] = [
+    ['Detection ID', source.id],
+    ['Image', source.imageId],
+    ['Analysis status', status],
+    ['Highlights', String(predictions.length)],
+    ['Selected highlight', selected ? `#${selectedIndex + 1} ${selected.label} (${pct(selected.confidence)})` : 'None'],
+    ['Average confidence', predictions.length > 0 ? pct(averageConfidence) : '—'],
+    ['Highest confidence', predictions.length > 0 ? pct(highestConfidence) : '—'],
+    ['Primary class', primaryClass],
+    ['Risk', primaryRisk],
+    ['Risk score', primary ? `${primary.riskScore}/100` : '—'],
+    ['Position', position],
+    ['Department', departmentName],
+    ['Response deadline', responseDeadline],
+  ];
+  const findings = [
+    `${predictions.length} detection highlight${predictions.length === 1 ? '' : 's'} recorded in ${source.imageId || source.id}.`,
+    selected
+      ? `Active highlight #${selectedIndex + 1}: ${selected.label} at ${pct(selected.confidence)} confidence.`
+      : 'No active highlight was selected.',
+    primary
+      ? `Primary assessment: ${primary.className} at ${pct(primary.confidence)} confidence with ${primary.riskLevel} risk.`
+      : 'No primary assessment was available.',
+    source.error ? `Analysis note: ${source.error}` : `Analysis status: ${status}.`,
+  ];
+  const columns = ['#', 'Label', 'Confidence', 'BBox (x,y,w,h)', 'Active'];
+  const pdfRows = predictions.length > 0
+    ? predictions.map((prediction, index) => ({
+        '#': String(index + 1),
+        Label: prediction.label,
+        Confidence: pct(prediction.confidence),
+        'BBox (x,y,w,h)': `${prediction.bbox.x.toFixed(4)}, ${prediction.bbox.y.toFixed(4)}, ${prediction.bbox.width.toFixed(4)}, ${prediction.bbox.height.toFixed(4)}`,
+        Active: index === selectedIndex ? 'Yes' : 'No',
+      }))
+    : [{
+        '#': '—',
+        Label: 'No highlights',
+        Confidence: '—',
+        'BBox (x,y,w,h)': '—',
+        Active: '—',
+      }];
+  const pdfData: ReportPdfData = {
+    id: fileName,
+    title: `Detection report · ${source.imageId || source.id}`,
+    window: 'Image analysis',
+    department: departmentName,
+    generatedAt,
+    metadata,
+    stats,
+    findings,
+    columns,
+    rows: pdfRows,
+    labels: {
+      keyMetrics: t('rpt.pdfKeyMetrics'),
+      findings: t('rpt.pdfFindings'),
+      dataTable: t('rpt.pdfDataTable'),
+    },
+  };
+
+  if (format === 'json') {
+    download(`${fileName}.json`, toJSON(jsonData), 'application/json');
+    return `${fileName}.json`;
+  }
+  if (format === 'csv') {
+    download(`${fileName}.csv`, toCSV(rows), 'text/csv');
+    return `${fileName}.csv`;
+  }
+  downloadReportPDF(pdfData);
+  return `${fileName}.pdf`;
 }
 
 export function download(name: string, content: string, mime = 'text/plain') {

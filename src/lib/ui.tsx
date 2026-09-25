@@ -2,7 +2,8 @@ import { useEffect, useId, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import type { AlertStatus, CaseStatus, DetectionClass, RiskLevel } from '../types';
 import { alertStatusLabel, caseStatusLabel, clsLabel, riskBadgeClass, riskLabel, statusBadgeClass } from './labels';
-import { CLASS_META, RISK_ORDER } from './mock';
+import { CLASS_META, RISK_ORDER, downloadDetectionReport } from './mock';
+import type { DetectionReportFormat, DetectionReportSource } from './mock';
 import { makeT } from './i18n';
 import { useStore } from './store';
 import { Link } from './router';
@@ -11,7 +12,9 @@ import {
   IconCheck,
   IconChevRight,
   IconDoc,
+  IconDownload,
   IconInfo,
+  IconPrint,
   IconX,
 } from '../components/Icons';
 
@@ -47,6 +50,34 @@ export function Button({ children, onClick, variant = 'secondary', size = 'md', 
     >
       {children}
     </button>
+  );
+}
+
+export function DetectionReportActions({ source, size = 'sm', disabled = false, compact = false }: { source: DetectionReportSource; size?: ButtonProps['size']; disabled?: boolean; compact?: boolean }) {
+  const { language, addToast } = useStore();
+  const t = makeT(language);
+
+  const exportReport = (format: DetectionReportFormat) => {
+    try {
+      const file = downloadDetectionReport(source, format, language);
+      addToast({ kind: 'success', title: t('rpt.toastExport'), text: t('rpt.toastExportText', { file }) });
+    } catch {
+      addToast({ kind: 'alert', title: t('rpt.toastExport'), text: t('rpt.toastExportError', { file: format.toUpperCase() }) });
+    }
+  };
+
+  return (
+    <div className={cx('row wrap', compact && 'detection-report-actions-compact')} style={{ gap: compact ? 4 : 6 }}>
+      <Button size={size} variant="secondary" onClick={() => exportReport('json')} disabled={disabled} title={t('batch.exportjson')}>
+        <IconDownload size={13} /> {compact ? 'JSON' : t('batch.exportjson')}
+      </Button>
+      <Button size={size} variant="secondary" onClick={() => exportReport('csv')} disabled={disabled} title={t('batch.exportcsv')}>
+        <IconDownload size={13} /> {compact ? 'CSV' : t('batch.exportcsv')}
+      </Button>
+      <Button size={size} variant="primary" onClick={() => exportReport('pdf')} disabled={disabled} title={t('rep.pdf')}>
+        <IconPrint size={13} /> {compact ? 'PDF' : t('rep.pdf')}
+      </Button>
+    </div>
   );
 }
 

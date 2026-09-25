@@ -2,10 +2,11 @@ import { useMemo, useState } from 'react';
 import { useStore } from '../lib/store';
 import { makeT } from '../lib/i18n';
 import { CLASS_META, deptById, fmtCoordinate, fmtDT, fmtSize, fmtWeight, pct, remTime, OPERATORS } from '../lib/mock';
+import type { DetectionReportSource } from '../lib/mock';
 import { alertStatusLabel, categoryLabel, clsLabel } from '../lib/labels';
 import { renderFrame } from '../lib/sonar';
 import { getCachedImage } from '../lib/detect';
-import { PageHead, Card, CardHead, Button, RiskBadge, StatusBadge, Tag, Kv, EmptyState } from '../lib/ui';
+import { PageHead, Card, CardHead, Button, RiskBadge, StatusBadge, Tag, Kv, EmptyState, DetectionReportActions } from '../lib/ui';
 import { Link, matchRoute, useHashRoute } from '../lib/router';
 import { IconArrowRight, IconCheck, IconDoc, IconNote } from '../components/Icons';
 import { WeatherReport } from '../components/Weather';
@@ -47,6 +48,15 @@ export function DetailPage() {
   };
 
   const operatorList = OPERATORS[det.department];
+  const reportSource: DetectionReportSource = {
+    id: det.id,
+    imageId: det.imageId,
+    createdAt: det.createdAt,
+    predictions: det.predictions ?? [],
+    detection: det,
+    status: 'completed',
+    selectedIndex: 0,
+  };
 
   return (
     <div>
@@ -63,6 +73,7 @@ export function DetailPage() {
           <div className="row wrap" style={{ gap: 8 }}>
             <RiskBadge risk={det.riskLevel} />
             {alert && <StatusBadge status={alert.status} />}
+            <DetectionReportActions source={reportSource} />
           </div>
         }
       />

@@ -2,10 +2,11 @@ import { useMemo, useState } from 'react';
 import { useStore } from '../lib/store';
 import { makeT } from '../lib/i18n';
 import { CLASS_LIST, CLASS_META, fmtCoordinate, fmtDT, timeAgo, toCSV, download } from '../lib/mock';
+import type { DetectionReportSource } from '../lib/mock';
 import { clsLabel, riskLabel } from '../lib/labels';
 import { renderFrame } from '../lib/sonar';
 import { getCachedImage } from '../lib/detect';
-import { PageHead, Card, Button, RiskBadge, ClassBadge, StatusBadge, Select, EmptyState, Modal } from '../lib/ui';
+import { PageHead, Card, Button, RiskBadge, ClassBadge, StatusBadge, Select, EmptyState, Modal, DetectionReportActions } from '../lib/ui';
 import { Link } from '../lib/router';
 import { IconDoc, IconSearch, IconTrash } from '../components/Icons';
 import type { Detection, RiskLevel } from '../types';
@@ -145,7 +146,7 @@ export function HistoryPage() {
           <EmptyState title={t('his.emptyTitle')} desc={t('his.emptyDesc')} action={<Button variant="secondary" onClick={() => { setQ(''); setCls('<all>'); setCat('all'); setRisk('<all>'); }}>{t('his.clearFilters')}</Button>} />
         ) : (
           <div className="table-wrap">
-            <table className="table">
+            <table className="table tbl history-table">
               <thead>
                 <tr>
                   <th>{t('his.col.detection')}</th>
@@ -156,15 +157,25 @@ export function HistoryPage() {
                   <th>{t('his.col.dept')}</th>
                   <th>{t('his.col.position')}</th>
                   <th>{t('his.col.detected')}</th>
+                  <th>{t('common.export')}</th>
                 </tr>
               </thead>
               <tbody>
                 {rows.map((d) => {
                   const st = statusFor(d);
+                  const reportSource: DetectionReportSource = {
+                    id: d.id,
+                    imageId: d.imageId,
+                    createdAt: d.createdAt,
+                    predictions: d.predictions ?? [],
+                    detection: d,
+                    status: 'completed',
+                    selectedIndex: 0,
+                  };
                   return (
                     <tr key={d.id}>
                       <td>
-                        <Link to={`detail/${d.id}`} className="row" style={{ gap: 10 }}>
+                        <Link to={`detail/${d.id}`} className="row history-detection-link" style={{ gap: 10 }}>
                           {d.imageUrl || getCachedImage(d.id) || getCachedImage(d.imageId) || framed.has(d.id) ? (
                             <img
                               className="sonimg thumb"
@@ -190,6 +201,7 @@ export function HistoryPage() {
                       <td className="tiny">{CLASS_META[d.className].category === 'marine-life' ? t('his.oceanSurvey') : d.department.replace(/-/g, ' ')}</td>
                       <td className="mono tiny muted">{fmtCoordinate(d.gps.latitude, d.gps.longitude)}</td>
                       <td className="mono tiny muted">{fmtDT(d.detectionTime)}</td>
+                      <td className="history-actions"><DetectionReportActions source={reportSource} compact /></td>
                     </tr>
                   );
                 })}

@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../lib/store';
 import { makeT } from '../lib/i18n';
-import { CLASS_LIST, CLASS_META, DEPARTMENTS, deptById, fmtDT, toCSV, toJSON, download, downloadPDF } from '../lib/mock';
+import { CLASS_LIST, CLASS_META, DEPARTMENTS, deptById, fmtDT, toCSV, toJSON, download, downloadReportPDF } from '../lib/mock';
 import { clsLabel, riskLabel } from '../lib/labels';
 import { PageHead, Card, CardHead, Button, Modal, ModalHead, Select, Tag, EmptyState } from '../lib/ui';
-import { IconDoc, IconRefresh } from '../components/Icons';
+import { IconDoc, IconDownload, IconRefresh } from '../components/Icons';
 import type { DepartmentId } from '../types';
 
 interface Report {
@@ -86,43 +86,48 @@ export function ReportsPage() {
   };
 
   const exportReport = (r: Report, fmt: 'csv' | 'json' | 'pdf') => {
-    if (fmt === 'csv') {
-      download(`${r.id}.csv`, toCSV(r.rows), 'text/csv');
-    } else if (fmt === 'json') {
-      download(`${r.id}.json`, toJSON({
-        id: r.id,
-        title: r.title,
-        window: r.window,
-        department: r.dept,
-        generated_at: r.createdAt,
-        stats: Object.fromEntries(r.stats),
-        findings: r.body,
-        data: r.rows,
-      }), 'application/json');
-    } else {
-      const rowsHtml = r.rows
-        .map((row) => `<tr>${r.head.map((h) => `<td>${row[h] ?? ''}</td>`).join('')}</tr>`)
-        .join('');
-      const statsHtml = r.stats.map(([k, v]) => `<tr><td>${k}</td><td><b>${v}</b></td></tr>`).join('');
-      const bodyHtml = r.body.map((line) => `<p>${line}</p>`).join('');
-      const title = r.title.replace(/&/g, '&amp;').replace(/</g, '&lt;');
-      downloadPDF(
-        `<!doctype html><html><head><meta charset="utf-8"><title>${title}</title>
-<style>body{font:12px/1.6 Segoe UI,system-ui,sans-serif;color:#111;margin:36px}
-h1{font-size:18px;margin:0 0 4px}h2{font-size:13px;margin:22px 0 8px;border-bottom:1px solid #ccc;padding-bottom:4px}
-table{border-collapse:collapse;width:100%;font-size:11px;margin:8px 0}
-th,td{border:1px solid #bbb;padding:5px 8px;text-align:left}
-th{background:#f0f0f0}p{white-space:pre-wrap;font-family:Consolas,monospace;font-size:11px}
-.meta{color:#555;margin-bottom:16px}</style></head><body>
-<h1>${title}</h1>
-<div class="meta">${t('rpt.pdfId', { id: r.id })} &middot; ${t('rpt.pdfWindow', { window: r.window })} &middot; ${t('rpt.pdfDepartment', { dept: r.dept })}<br>${t('rpt.pdfGenerated', { date: fmtDT(r.createdAt) })}</div>
-<h2>${t('rpt.pdfKeyMetrics')}</h2><table><tbody>${statsHtml}</tbody></table>
-<h2>${t('rpt.pdfFindings')}</h2><div>${bodyHtml}</div>
-<h2>${t('rpt.pdfDataTable')}</h2><table><thead><tr>${r.head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${rowsHtml}</tbody></table>
-</body></html>`,
-      );
+    try {
+      if (fmt === 'csv') {
+        download(`${r.id}.csv`, toCSV(r.rows), 'text/csv');
+      } else if (fmt === 'json') {
+        download(`${r.id}.json`, toJSON({
+          id: r.id,
+          title: r.title,
+          window: r.window,
+          department: r.dept,
+          generated_at: r.createdAt,
+          stats: Object.fromEntries(r.stats),
+          findings: r.body,
+          data: r.rows,
+        }), 'application/json');
+      } else {
+        downloadReportPDF({
+          id: r.id,
+          title: r.title,
+          window: r.window,
+          department: r.dept,
+          generatedAt: fmtDT(r.createdAt),
+          metadata: [
+            t('rpt.pdfId', { id: r.id }),
+            t('rpt.pdfWindow', { window: r.window }),
+            t('rpt.pdfDepartment', { dept: r.dept }),
+            t('rpt.pdfGenerated', { date: fmtDT(r.createdAt) }),
+          ],
+          stats: r.stats,
+          findings: r.body,
+          columns: r.head,
+          rows: r.rows,
+          labels: {
+            keyMetrics: t('rpt.pdfKeyMetrics'),
+            findings: t('rpt.pdfFindings'),
+            dataTable: t('rpt.pdfDataTable'),
+          },
+        });
+      }
+      store.addToast({ kind: 'success', title: t('rpt.toastExport'), text: t('rpt.toastExportText', { file: `${r.id}.${fmt}` }) });
+    } catch {
+      store.addToast({ kind: 'alert', title: t('common.failed'), text: t('rpt.toastExportError', { file: `${r.id}.${fmt}` }) });
     }
-    store.addToast({ kind: 'success', title: t('rpt.toastExport'), text: t('rpt.toastExportText', { file: `${r.id}.${fmt}` }) });
   };
 
   return (
@@ -192,10 +197,11 @@ th{background:#f0f0f0}p{white-space:pre-wrap;font-family:Consolas,monospace;font
                       <div className="tiny muted" style={{ marginTop: 2 }}>{r.title} · {r.window} · {r.dept}</div>
                       <div className="mono tiny muted">{fmtDT(r.createdAt)}</div>
                     </div>
-                    <div className="row" style={{ gap: 6 }}>
+                    <div className="row wrap" style={{ gap: 6 }}>
                       <Button size="sm" variant="ghost" onClick={() => setOpen(r)}>{t('common.open')}</Button>
                       <Button size="sm" variant="ghost" onClick={() => exportReport(r, 'csv')}>CSV</Button>
                       <Button size="sm" variant="ghost" onClick={() => exportReport(r, 'json')}>JSON</Button>
+                      <Button size="sm" variant="ghost" title={t('rep.pdf')} onClick={() => exportReport(r, 'pdf')}><IconDownload size={13} /> PDF</Button>
                     </div>
                   </div>
                 ))}
@@ -234,7 +240,7 @@ th{background:#f0f0f0}p{white-space:pre-wrap;font-family:Consolas,monospace;font
             <div className="row" style={{ gap: 8, marginTop: 16 }}>
               <Button variant="primary" onClick={() => exportReport(open, 'csv')}><IconDoc size={15} /> {t('rep.csv')}</Button>
               <Button variant="secondary" onClick={() => exportReport(open, 'json')}>JSON</Button>
-              <Button variant="secondary" onClick={() => exportReport(open, 'pdf')}>PDF</Button>
+              <Button variant="secondary" onClick={() => exportReport(open, 'pdf')}><IconDownload size={15} /> {t('rep.pdf')}</Button>
               <Button variant="secondary" onClick={() => setOpen(null)}>{t('common.close')}</Button>
             </div>
           </div>

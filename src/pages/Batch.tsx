@@ -2,10 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { useStore } from '../lib/store';
 import { makeT } from '../lib/i18n';
-import { CLASS_META, toCSV, toJSON, download, makeDetectionFromFile } from '../lib/mock';
+import { CLASS_META, toCSV, toJSON, download, downloadBatchReportPDF, makeDetectionFromFile } from '../lib/mock';
+import type { DetectionReportSource } from '../lib/mock';
 import { fetchPredictions, mapClass, fileToDataUrl, setCachedImage } from '../lib/detect';
 import { clsLabel } from '../lib/labels';
-import { PageHead, Card, Button, Progress, Tag, EmptyState } from '../lib/ui';
+import { PageHead, Card, Button, Progress, Tag, EmptyState, DetectionReportActions } from '../lib/ui';
 import { Link } from '../lib/router';
 import {
   IconFolder,
@@ -14,6 +15,7 @@ import {
   IconUpload,
   IconX,
   IconDoc,
+  IconDownload,
   IconPlay,
   IconShield,
   IconAlert,
@@ -471,7 +473,7 @@ export function BatchPage() {
   // -------------------------------------------------------------
   // Export REAL Results (CSV & JSON)
   // -------------------------------------------------------------
-  const exportResults = (fmt: 'csv' | 'json') => {
+  const exportResults = (fmt: 'csv' | 'json' | 'pdf') => {
     if (fmt === 'csv') {
       const rows: Record<string, string | number | undefined>[] = [];
       items.forEach((it) => {
@@ -526,7 +528,7 @@ export function BatchPage() {
         title: t('batch.exported.title'),
         text: t('batch.exported.csv', { file: 'oceonix-real-batch.csv' }),
       });
-    } else {
+    } else if (fmt === 'json') {
       const jsonData = items.map((it) => ({
         filename: it.path ?? it.filename,
         status: it.status,
@@ -541,6 +543,21 @@ export function BatchPage() {
         title: t('batch.exported.title'),
         text: t('batch.exported.json', { file: 'oceonix-real-batch.json' }),
       });
+    } else {
+      try {
+        const file = downloadBatchReportPDF(items, language);
+        addToast({
+          kind: 'success',
+          title: t('batch.exported.title'),
+          text: t('batch.exported.pdf', { file }),
+        });
+      } catch {
+        addToast({
+          kind: 'alert',
+          title: t('common.failed'),
+          text: t('rpt.toastExportError', { file: 'oceonix-real-batch.pdf' }),
+        });
+      }
     }
   };
 
@@ -704,6 +721,9 @@ export function BatchPage() {
                 <Button size="sm" variant="primary" onClick={() => exportResults('json')}>
                   <IconDoc size={14} /> {t('batch.exportjson')}
                 </Button>
+                <Button size="sm" variant="primary" onClick={() => exportResults('pdf')}>
+                  <IconDownload size={14} /> {t('batch.exportpdf')}
+                </Button>
               </>
             )}
           </div>
@@ -735,6 +755,17 @@ export function BatchPage() {
       ) : (
         <div className="grid cols-12" style={{ marginTop: 16, gap: 14 }}>
           {items.map((it) => {
+            const reportDetection = it.detectionId ? store.detections.find((detection) => detection.id === it.detectionId) : undefined;
+            const reportSource: DetectionReportSource = {
+              id: it.detectionId ?? it.id,
+              imageId: it.filename,
+              createdAt: reportDetection?.createdAt ?? new Date(it.addedAt).toISOString(),
+              predictions: it.predictions,
+              detection: reportDetection,
+              status: 'completed',
+              selectedIndex: 0,
+              confidenceThreshold: confThreshold,
+            };
             return (
               <div key={it.id} className="span-4">
                 <Card className="h-full" style={{ padding: 12 }}>
@@ -941,6 +972,11 @@ export function BatchPage() {
                       <IconX size={12} />
                     </Button>
                   </div>
+                  {it.status === 'completed' && (
+                    <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid var(--line-faint)' }}>
+                      <DetectionReportActions source={reportSource} />
+                    </div>
+                  )}
                 </Card>
               </div>
             );
