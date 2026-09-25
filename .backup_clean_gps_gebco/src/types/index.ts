@@ -2,7 +2,7 @@ export type Language = 'en' | 'hi' | 'mr';
 
 export type Theme = 'dark' | 'light';
 
-export type DepartmentId =
+export type DepartmentId = 
   | 'marine-operations'
   | 'marine-engineering'
   | 'marine-environmental'
@@ -11,13 +11,13 @@ export type DepartmentId =
   | 'recovery-response'
   | 'system-admin';
 
-export type UserRole =
+export type UserRole = 
   | 'operator'
   | 'supervisor'
   | 'manager'
   | 'admin';
 
-export type DetectionClass =
+export type DetectionClass = 
   | 'shipwreck'
   | 'pipeline'
   | 'ghost_fishing_gear'
@@ -29,7 +29,7 @@ export type DetectionClass =
 
 export type RiskLevel = 'critical' | 'high' | 'medium' | 'low';
 
-export type AlertStatus =
+export type AlertStatus = 
   | 'new'
   | 'unacknowledged'
   | 'pending'
@@ -40,7 +40,7 @@ export type AlertStatus =
   | 'overdue'
   | 'escalated';
 
-export type CaseStatus =
+export type CaseStatus = 
   | 'open'
   | 'acknowledged'
   | 'assigned'
@@ -50,14 +50,14 @@ export type CaseStatus =
   | 'verified'
   | 'closed';
 
-export type ProcessingStatus =
+export type ProcessingStatus = 
   | 'queued'
   | 'processing'
   | 'completed'
   | 'failed'
   | 'cancelled';
 
-export type MonitoringStatus =
+export type MonitoringStatus = 
   | 'idle'
   | 'active'
   | 'paused'
@@ -68,7 +68,6 @@ export interface GPSPosition {
   longitude: number;
   accuracy?: number;
   timestamp: string;
-  source?: 'exif' | 'manual' | 'fallback' | 'unknown';
 }
 
 export interface Site {
