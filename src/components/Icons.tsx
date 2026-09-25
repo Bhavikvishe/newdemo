@@ -59,6 +59,18 @@ export function IconGauge(props: IconProps) {
   );
 }
 
+/** ocean depth sounding / bathymetry */
+export function IconDepth(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M2 5 q2.5 -2 5 0 t5 0 t5 0 t5 0" />
+      <path d="M2 19 C 6 15, 10 18, 14 16 C 18 14, 20 18, 22 17" />
+      <path d="M12 5 v10" strokeDasharray="2 2" />
+      <path d="M9 13 l3 3 3 -3" />
+    </Svg>
+  );
+}
+
 /** radar sweep */
 export function IconRadar(props: IconProps) {
   return (

@@ -18,7 +18,7 @@ const STEPS: TourStep[] = [
   { id: 'overview', route: 'overview', titleKey: 'ob.step.overview', descKey: 'ob.step.overview.desc', target: '.page-head' },
   { id: 'detection', route: 'detection', titleKey: 'ob.step.detection', descKey: 'ob.step.detection.desc', target: '.page-head' },
   { id: 'batch', route: 'batch', titleKey: 'ob.step.batch', descKey: 'ob.step.batch.desc', target: '.page-head' },
-  { id: 'live', route: 'live', titleKey: 'ob.step.live', descKey: 'ob.step.live.desc', target: '.page-head' },
+  { id: 'depth', route: 'depth', titleKey: 'ob.step.live', descKey: 'ob.step.live.desc', target: '.page-head' },
   { id: 'map', route: 'map', titleKey: 'ob.step.map', descKey: 'ob.step.map.desc', target: '.page-head' },
   { id: 'alerts', route: 'alerts', titleKey: 'ob.step.alerts', descKey: 'ob.step.alerts.desc', target: '.page-head' },
   { id: 'routing', route: 'department', titleKey: 'ob.step.routing', descKey: 'ob.step.routing.desc', target: '.page-head' },

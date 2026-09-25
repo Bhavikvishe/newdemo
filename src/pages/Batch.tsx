@@ -45,6 +45,14 @@ function filesToItems(files: File[]): BatchItem[] {
       setCachedImage(filename, previewUrl);
       setCachedImage(f.name, previewUrl);
     }
+    if (f.type.startsWith('image/')) {
+      fileToDataUrl(f).then((dataUrl) => {
+        if (dataUrl) {
+          setCachedImage(filename, dataUrl);
+          setCachedImage(f.name, dataUrl);
+        }
+      }).catch(() => {});
+    }
 
     return {
       id: `bf-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,

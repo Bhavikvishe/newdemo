@@ -23,7 +23,7 @@ import {
   OPERATORS,
 } from './mock';
 import { makeT } from './i18n';
-import { clearCachedImages } from './detect';
+import { clearCachedImages, setCachedImage, getCachedImage } from './detect';
 
 const STORE_KEY = 'oceonix.store.v1';
 
@@ -192,6 +192,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     document.documentElement.lang = language;
   }, [language]);
+
+  useEffect(() => {
+    detections.forEach((d) => {
+      if (d.imageUrl) {
+        setCachedImage(d.id, d.imageUrl);
+        if (d.imageId) setCachedImage(d.imageId, d.imageUrl);
+      } else {
+        const cached = getCachedImage(d.id) || getCachedImage(d.imageId);
+        if (cached) d.imageUrl = cached;
+      }
+    });
+    alerts.forEach((a) => {
+      if (a.detection?.imageUrl) {
+        setCachedImage(a.detection.id, a.detection.imageUrl);
+        setCachedImage(a.detectionId, a.detection.imageUrl);
+        if (a.detection.imageId) setCachedImage(a.detection.imageId, a.detection.imageUrl);
+      } else if (a.detection) {
+        const cached = getCachedImage(a.detection.id) || getCachedImage(a.detection.imageId) || getCachedImage(a.detectionId);
+        if (cached) a.detection.imageUrl = cached;
+      }
+    });
+  }, [detections, alerts]);
 
   const dismissToast = useCallback((id: string) => {
     setToasts((ts) => ts.filter((t) => t.id !== id));

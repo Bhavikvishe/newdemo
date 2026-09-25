@@ -176,9 +176,71 @@ export async function fileToDataUrl(file: File, maxDim = 960): Promise<string> {
 
 export const imageCache = new Map<string, string>();
 
+const IDB_NAME = 'oceonix_img_cache_v1';
+const IDB_STORE = 'images';
+let idbPromise: Promise<IDBDatabase | null> | null = null;
+
+function getIdb(): Promise<IDBDatabase | null> {
+  if (typeof window === 'undefined' || !window.indexedDB) {
+    return Promise.resolve(null);
+  }
+  if (!idbPromise) {
+    idbPromise = new Promise((resolve) => {
+      try {
+        const req = indexedDB.open(IDB_NAME, 1);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains(IDB_STORE)) {
+            db.createObjectStore(IDB_STORE, { keyPath: 'key' });
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => resolve(null);
+      } catch {
+        resolve(null);
+      }
+    });
+  }
+  return idbPromise;
+}
+
+// Restore stored images from IndexedDB into memory cache on initial load
+if (typeof window !== 'undefined' && window.indexedDB) {
+  getIdb().then((db) => {
+    if (!db) return;
+    try {
+      const tx = db.transaction(IDB_STORE, 'readonly');
+      const store = tx.objectStore(IDB_STORE);
+      const cursorReq = store.openCursor();
+      cursorReq.onsuccess = () => {
+        const cursor = cursorReq.result;
+        if (cursor) {
+          if (cursor.value?.key && cursor.value?.url && !imageCache.has(cursor.value.key)) {
+            imageCache.set(cursor.value.key, cursor.value.url);
+          }
+          cursor.continue();
+        }
+      };
+    } catch {
+      /* ignore */
+    }
+  }).catch(() => {});
+}
+
 export function setCachedImage(key: string, url: string) {
   if (!key || !url) return;
   imageCache.set(key, url);
+  if (typeof window !== 'undefined' && window.indexedDB) {
+    getIdb().then((db) => {
+      if (!db) return;
+      try {
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        tx.objectStore(IDB_STORE).put({ key, url, updatedAt: Date.now() });
+      } catch {
+        /* ignore */
+      }
+    }).catch(() => {});
+  }
 }
 
 export function getCachedImage(key?: string): string | undefined {
@@ -188,4 +250,15 @@ export function getCachedImage(key?: string): string | undefined {
 
 export function clearCachedImages(): void {
   imageCache.clear();
-}
+  if (typeof window !== 'undefined' && window.indexedDB) {
+    getIdb().then((db) => {
+      if (!db) return;
+      try {
+        const tx = db.transaction(IDB_STORE, 'readwrite');
+        tx.objectStore(IDB_STORE).clear();
+      } catch {
+        /* ignore */
+      }
+    }).catch(() => {});
+  }
+}

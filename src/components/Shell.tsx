@@ -69,7 +69,8 @@ function pageLabelKey(page: string): string {
     case 'overview': return 'nav.overview';
     case 'detection': return 'nav.detection';
     case 'batch': return 'nav.batch';
-    case 'live': return 'nav.live';
+    case 'depth': return 'nav.depth';
+    case 'live': return 'nav.depth';
     case 'map': return 'nav.map';
     case 'navigate': return 'nav.navigate';
     case 'alerts': return 'nav.alerts';

@@ -12,6 +12,7 @@ import {
 } from '../lib/mock';
 import { clsLabel, riskColor, riskLabel } from '../lib/labels';
 import { renderFrame } from '../lib/sonar';
+import { getCachedImage } from '../lib/detect';
 import { PageHead, Card, CardHead, Stat, RiskBadge, ClassBadge, Button, Progress, Tag } from '../lib/ui';
 import { BarChart, Donut, LineChart, HBar } from '../lib/charts';
 import { Link } from '../lib/router';
@@ -76,7 +77,10 @@ export function DashboardPage() {
 
     const feed = detections.slice(0, 8);
     const frames = new Map<string, string>();
-    feed.forEach((d) => frames.set(d.id, renderFrame(d, { width: 240 }, language)));
+    feed.forEach((d) => {
+      const real = d.imageUrl || getCachedImage(d.id) || getCachedImage(d.imageId);
+      frames.set(d.id, real || renderFrame(d, { width: 240 }, language));
+    });
 
     const framesByClass = new Map<string, string>();
     CLASS_LIST.forEach((c) => {
@@ -276,7 +280,17 @@ export function DashboardPage() {
                 const alert = alerts.find((a) => a.detectionId === d.id);
                 return (
                   <Link key={d.id} to={`detail/${d.id}`} className="feed-row">
-                    <img className="sonimg thumb" src={data.frames.get(d.id)} alt="" width={64} height={40} style={{ width: 64, height: 40 }} />
+                    <img
+                      className="sonimg thumb alert-thumb"
+                      src={data.frames.get(d.id)}
+                      alt=""
+                      width={64}
+                      height={40}
+                      style={{ width: 64, height: 40, objectFit: 'cover' }}
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).src = renderFrame(d, { width: 240 }, language);
+                      }}
+                    />
                     <div style={{ minWidth: 0, flex: 1 }}>
                       <div className="row-between" style={{ gap: 8 }}>
                         <ClassBadge cls={d.className} />

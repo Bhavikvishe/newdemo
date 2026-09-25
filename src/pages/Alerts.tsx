@@ -17,6 +17,7 @@ import { renderFrame } from '../lib/sonar';
 import { PageHead, Card, CardHead, Button, Badge, RiskBadge, Modal, ModalHead, Tag, Select } from '../lib/ui';
 import { Link } from '../lib/router';
 import { IconCheck, IconDoc } from '../components/Icons';
+import { getCachedImage } from '../lib/detect';
 import type { Alert, AlertStatus, DepartmentId, DetectionClass } from '../types';
 
 const OPEN = ['new', 'unacknowledged', 'pending', 'assigned', 'in_progress', 'manual_verification', 'overdue', 'escalated'];
@@ -90,8 +91,30 @@ export function AlertsPage() {
 
   const frames = useMemo(() => {
     const m = new Map<string, string>();
-    filtered.slice(0, 30).forEach((a) => m.set(a.detectionId, renderFrame(a.detection, { width: 160 }, language)));
-    if (selected) m.set(selected.detectionId, renderFrame(selected.detection, { width: 320 }, language));
+    filtered.forEach((a) => {
+      const real =
+        a.detection?.imageUrl ||
+        getCachedImage(a.detection?.id) ||
+        getCachedImage(a.detection?.imageId) ||
+        getCachedImage(a.detectionId);
+      if (real) {
+        m.set(a.detectionId, real);
+      } else {
+        m.set(a.detectionId, renderFrame(a.detection, { width: 160 }, language));
+      }
+    });
+    if (selected) {
+      const realSel =
+        selected.detection?.imageUrl ||
+        getCachedImage(selected.detection?.id) ||
+        getCachedImage(selected.detection?.imageId) ||
+        getCachedImage(selected.detectionId);
+      if (realSel) {
+        m.set(`sel-${selected.detectionId}`, realSel);
+      } else {
+        m.set(`sel-${selected.detectionId}`, renderFrame(selected.detection, { width: 480 }, language));
+      }
+    }
     return m;
   }, [filtered, selected, language]);
 
@@ -122,7 +145,7 @@ export function AlertsPage() {
       <Card style={{ marginBottom: 16 }}>
         <CardHead kt={t('al.ktRouting')} title={t('al.routingRules')} right={<span className="badge b-accent"><span className="dot" /> {t('al.auto')}</span>} />
         <div className="table-wrap" style={{ overflowX: 'auto' }}>
-          <table className="table">
+          <table className="tbl">
             <thead>
               <tr>
                 <th>{t('al.thObjectClass')}</th><th>{t('al.thRiskBase')}</th><th>{t('al.thPrimaryDept')}</th><th>{t('al.escalation')}</th><th>{t('common.deadline')}</th><th>{t('al.thFields')}</th>
@@ -174,46 +197,124 @@ export function AlertsPage() {
           </div>
         </div>
 
-        <div className="table-wrap">
-          <table className="table">
+        <div className="table-wrap" style={{ overflowX: 'auto' }}>
+          <table className="tbl alerts-table">
             <thead>
               <tr>
-                <th>{t('al.thAlert')}</th>
-                <th>{t('al.thObject')}</th>
-                <th>{t('common.risk')}</th>
-                <th>{t('common.status')}</th>
-                <th>{t('al.thDept')}</th>
-                <th>{t('al.operator')}</th>
-                <th>{t('common.deadline')}</th>
-                <th>{t('al.thDetected')}</th>
+                <th style={{ width: '23%' }}>{t('al.thAlert')}</th>
+                <th style={{ width: '14%' }}>{t('al.thObject')}</th>
+                <th style={{ width: '10%' }}>{t('common.risk')}</th>
+                <th style={{ width: '11%' }}>{t('common.status')}</th>
+                <th style={{ width: '11%' }}>{t('al.thDept')}</th>
+                <th style={{ width: '10%' }}>{t('al.operator')}</th>
+                <th style={{ width: '11%' }}>{t('common.deadline')}</th>
+                <th style={{ width: '10%' }}>{t('al.thDetected')}</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((a) => {
                 const d = a.detection;
+                const imgSrc =
+                  d.imageUrl ||
+                  getCachedImage(d.id) ||
+                  getCachedImage(d.imageId) ||
+                  getCachedImage(a.detectionId) ||
+                  frames.get(a.detectionId);
+
                 return (
                   <tr key={a.id} onClick={() => setSelected(a)} style={{ cursor: 'pointer' }}>
                     <td>
-                      <div className="row" style={{ gap: 10 }}>
-                        {frames.get(a.detectionId) && <img className="sonimg thumb" src={frames.get(a.detectionId)} alt="" width={40} height={26} />}
-                        <div>
-                          <b className="mono" style={{ fontSize: 12 }}>{a.alertId}</b>
-                          <div className="mono tiny muted">{d.id}</div>
+                      <div className="row" style={{ gap: 12, alignItems: 'center', minWidth: 0 }}>
+                        {imgSrc ? (
+                          <img
+                            className="sonimg thumb alert-thumb"
+                            src={imgSrc}
+                            alt={clsLabel(d.className, language)}
+                            style={{
+                              width: 58,
+                              height: 38,
+                              minWidth: 58,
+                              maxWidth: 58,
+                              borderRadius: 6,
+                              objectFit: 'cover',
+                              flexShrink: 0,
+                              border: '1px solid var(--line-soft)',
+                              background: '#04121c',
+                            }}
+                            onError={(e) => {
+                              (e.currentTarget as HTMLImageElement).src = renderFrame(d, { width: 160 }, language);
+                            }}
+                          />
+                        ) : (
+                          <div
+                            style={{
+                              width: 58,
+                              height: 38,
+                              minWidth: 58,
+                              maxWidth: 58,
+                              borderRadius: 6,
+                              background: 'var(--panel)',
+                              border: '1px solid var(--line-soft)',
+                              flexShrink: 0,
+                            }}
+                          />
+                        )}
+                        <div style={{ minWidth: 0, overflow: 'hidden' }}>
+                          <div className="row" style={{ gap: 6, alignItems: 'center' }}>
+                            <b className="mono" style={{ fontSize: 13, color: 'var(--ink)' }}>{a.alertId}</b>
+                            {d.isRealModel && (
+                              <span
+                                style={{
+                                  fontSize: 9,
+                                  fontWeight: 700,
+                                  padding: '1px 5px',
+                                  borderRadius: 4,
+                                  background: 'rgba(0, 240, 255, 0.12)',
+                                  color: 'var(--accent)',
+                                  border: '1px solid rgba(0, 240, 255, 0.3)',
+                                  letterSpacing: '0.04em',
+                                }}
+                              >
+                                REAL AI
+                              </span>
+                            )}
+                          </div>
+                          <div
+                            className="mono tiny muted"
+                            title={`Detection: ${d.id}`}
+                            style={{
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                              maxWidth: 155,
+                              fontSize: 11,
+                              marginTop: 2,
+                            }}
+                          >
+                            {d.imageId ? d.imageId : d.id.replace('REAL-BATCH-', 'BATCH-')}
+                          </div>
                         </div>
                       </div>
                     </td>
                     <td><ClsTag cls={d.className} /></td>
                     <td><RiskBadge risk={d.riskLevel} label={riskLabel(d.riskLevel, language)} /></td>
                     <td><Badge tone={statusBadgeClass(a.status)} dot>{alertStatusLabel(a.status, language)}</Badge></td>
-                    <td><span className="row" style={{ gap: 6, fontSize: 12 }}><span className="legend-dot" style={{ background: CLASS_META[d.className].color }} />{deptById(d.department).shortName}</span></td>
-                    <td className="tiny">{a.assignedOperator ?? '—'}</td>
+                    <td>
+                      <span className="row" style={{ gap: 6, fontSize: 12.5, alignItems: 'center' }}>
+                        <span className="legend-dot" style={{ background: deptById(d.department).color }} />
+                        <span>{deptById(d.department).shortName}</span>
+                      </span>
+                    </td>
+                    <td className="tiny muted">{a.assignedOperator ?? '—'}</td>
                     <td>
                       {a.status === 'resolved' ? (
                         <span className="mono tiny" style={{ color: 'var(--teal)' }}>{t('al.done')}</span>
                       ) : a.overdue || a.status === 'overdue' ? (
-                        <span className="mono tiny" style={{ color: 'var(--critical)' }}>{t('st.overdue').toUpperCase()}</span>
+                        <span className="mono tiny" style={{ color: 'var(--critical)', fontWeight: 600 }}>{t('st.overdue').toUpperCase()}</span>
                       ) : (
-                        <span className="mono tiny" style={{ color: remTime(a.responseDeadline).startsWith('EXPIRED') ? 'var(--critical)' : 'var(--ink-2)' }}>{remTime(a.responseDeadline)}</span>
+                        <span className="mono tiny" style={{ color: remTime(a.responseDeadline).startsWith('EXPIRED') ? 'var(--critical)' : 'var(--ink-2)' }}>
+                          {remTime(a.responseDeadline)}
+                        </span>
                       )}
                     </td>
                     <td className="mono tiny muted">{fmtDT(d.detectionTime)}</td>
@@ -238,9 +339,100 @@ export function AlertsPage() {
             <ModalHead kt={t('al.ktDetail')} title={`${selected.alertId} · ${clsLabel(selected.detection.className, language)}`} onClose={() => setSelected(null)} />
             <div className="grid cols-12" style={{ gap: 16 }}>
               <div className="span-7 stack" style={{ gap: 14 }}>
-                <div className="sonimg" style={{ position: 'relative', borderRadius: 10, overflow: 'hidden' }}>
-                  {frames.get(selected.detectionId) && <img src={frames.get(selected.detectionId)} alt="" width={320} height={146} style={{ width: '100%', height: 'auto', display: 'block' }} />}
-                  <div style={{ position: 'absolute', left: `${selected.detection.boundingBox.x * 100}%`, top: `${selected.detection.boundingBox.y * 100}%`, width: `${selected.detection.boundingBox.width * 100}%`, height: `${selected.detection.boundingBox.height * 100}%`, border: '2px solid var(--accent)' }} />
+                <div
+                  className="sonimg"
+                  style={{
+                    position: 'relative',
+                    borderRadius: 12,
+                    overflow: 'hidden',
+                    background: '#040d16',
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    minHeight: 220,
+                  }}
+                >
+                  <div style={{ position: 'relative', display: 'inline-block', maxWidth: '100%', lineHeight: 0 }}>
+                    <img
+                      src={
+                        selected.detection.imageUrl ||
+                        getCachedImage(selected.detection.id) ||
+                        getCachedImage(selected.detection.imageId) ||
+                        getCachedImage(selected.detectionId) ||
+                        frames.get(`sel-${selected.detectionId}`) ||
+                        frames.get(selected.detectionId)
+                      }
+                      alt=""
+                      style={{
+                        maxWidth: '100%',
+                        maxHeight: '44vh',
+                        width: 'auto',
+                        height: 'auto',
+                        display: 'block',
+                        borderRadius: 8,
+                      }}
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).src = renderFrame(selected.detection, { width: 480 }, language);
+                      }}
+                    />
+                    {selected.detection.predictions && selected.detection.predictions.length > 0 ? (
+                      selected.detection.predictions.map((p, idx) => {
+                        const isNearTop = p.bbox.y < 0.12;
+                        const isNearRight = (p.bbox.x + (p.bbox.width || 0)) > 0.7;
+                        return (
+                          <div
+                            key={idx}
+                            style={{
+                              position: 'absolute',
+                              left: `${p.bbox.x * 100}%`,
+                              top: `${p.bbox.y * 100}%`,
+                              width: `${p.bbox.width * 100}%`,
+                              height: `${p.bbox.height * 100}%`,
+                              border: idx === 0 ? '2.5px solid var(--accent)' : '2px solid rgba(0, 220, 200, 0.8)',
+                              background: idx === 0 ? 'rgba(0, 240, 255, 0.12)' : 'rgba(0, 220, 200, 0.05)',
+                              boxShadow: '0 0 0 1px rgba(0,0,0,0.6)',
+                              pointerEvents: 'none',
+                            }}
+                          >
+                            <span
+                              style={{
+                                position: 'absolute',
+                                bottom: isNearTop ? 'auto' : '100%',
+                                top: isNearTop ? '100%' : 'auto',
+                                left: isNearRight ? 'auto' : 0,
+                                right: isNearRight ? 0 : 'auto',
+                                background: idx === 0 ? 'var(--accent)' : 'rgba(2,6,12,0.92)',
+                                color: idx === 0 ? '#000' : 'var(--accent)',
+                                fontWeight: 700,
+                                fontSize: 10,
+                                padding: '1px 5px',
+                                borderRadius: isNearTop ? '0 0 3px 3px' : '3px 3px 0 0',
+                                whiteSpace: 'nowrap',
+                                fontFamily: 'monospace',
+                                lineHeight: 'normal',
+                              }}
+                            >
+                              #{idx + 1} {p.label} {(p.confidence * 100).toFixed(1)}%
+                            </span>
+                          </div>
+                        );
+                      })
+                    ) : selected.detection.boundingBox ? (
+                      <div
+                        style={{
+                          position: 'absolute',
+                          left: `${selected.detection.boundingBox.x * 100}%`,
+                          top: `${selected.detection.boundingBox.y * 100}%`,
+                          width: `${selected.detection.boundingBox.width * 100}%`,
+                          height: `${selected.detection.boundingBox.height * 100}%`,
+                          border: '2.5px solid var(--accent)',
+                          background: 'rgba(0, 240, 255, 0.12)',
+                          boxShadow: '0 0 0 1px rgba(0,0,0,0.6)',
+                          pointerEvents: 'none',
+                        }}
+                      />
+                    ) : null}
+                  </div>
                 </div>
                 <div className="row wrap" style={{ gap: 8 }}>
                   <Tag kind="ai">{t('al.confTag', { pct: Math.round(selected.detection.confidence * 100) })}</Tag>

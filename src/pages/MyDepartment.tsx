@@ -4,6 +4,7 @@ import { makeT } from '../lib/i18n';
 import { deptById, fmtDT, remTime, OPERATORS } from '../lib/mock';
 import { alertStatusLabel, clsLabel, riskLabel, statusBadgeClass } from '../lib/labels';
 import { renderFrame } from '../lib/sonar';
+import { getCachedImage } from '../lib/detect';
 import { PageHead, Card, CardHead, Button, RiskBadge, Select, EmptyState } from '../lib/ui';
 import { Link } from '../lib/router';
 import { IconUser, IconCheck, IconDoc } from '../components/Icons';
@@ -62,7 +63,14 @@ export function MyDepartmentPage() {
 
   const frames = useMemo(() => {
     const m = new Map<string, string>();
-    view.slice(0, 8).forEach((a) => m.set(a.detectionId, renderFrame(a.detection, { width: 120 }, language)));
+    view.forEach((a) => {
+      const real =
+        a.detection.imageUrl ||
+        getCachedImage(a.detection.id) ||
+        getCachedImage(a.detection.imageId) ||
+        getCachedImage(a.detectionId);
+      m.set(a.detectionId, real || renderFrame(a.detection, { width: 120 }, language));
+    });
     return m;
   }, [view, language]);
 
@@ -170,7 +178,19 @@ export function MyDepartmentPage() {
                   const isAided = !!a.interdepartmentalAid;
                   return (
                     <div key={a.id} className="row" style={{ gap: 12, padding: 10, border: '1px solid var(--line-faint)', borderRadius: 12 }}>
-                      {frames.get(a.detectionId) && <img className="sonimg thumb" src={frames.get(a.detectionId)} alt="" width={54} height={34} />}
+                      {frames.get(a.detectionId) && (
+                        <img
+                          className="sonimg thumb alert-thumb"
+                          src={frames.get(a.detectionId)}
+                          alt=""
+                          width={54}
+                          height={34}
+                          style={{ objectFit: 'cover' }}
+                          onError={(e) => {
+                            (e.currentTarget as HTMLImageElement).src = renderFrame(a.detection, { width: 120 }, language);
+                          }}
+                        />
+                      )}
                       <div style={{ minWidth: 0, flex: 1 }}>
                         <div className="row" style={{ gap: 8, alignItems: 'center' }}>
                           <b className="mono" style={{ fontSize: 12 }}>{a.alertId}</b>

@@ -10,11 +10,11 @@ import {
   IconHelm,
   IconMap,
   IconPin,
-  IconRadar,
   IconScan,
   IconShield,
   IconUpload,
   IconConnection,
+  IconDepth,
 } from './Icons';
 
 export interface NavItem {
@@ -50,7 +50,7 @@ export function buildNav(_user: SessionUser): NavSection[] {
     { id: 'overview', labelKey: 'nav.overview', href: 'overview', icon: IconActivity },
     { id: 'detection', labelKey: 'nav.detection', href: 'detection', icon: IconUpload },
     { id: 'batch', labelKey: 'nav.batch', href: 'batch', icon: IconScan },
-    { id: 'live', labelKey: 'nav.live', href: 'live', icon: IconRadar },
+    { id: 'depth', labelKey: 'nav.depth', href: 'depth', icon: IconDepth },
     { id: 'map', labelKey: 'nav.map', href: 'map', icon: IconMap },
     { id: 'alerts', labelKey: 'nav.alerts', href: 'alerts', icon: IconAlert, badge: { n: 'alerts' } },
     { id: 'history', labelKey: 'nav.history', href: 'history', icon: IconDoc },

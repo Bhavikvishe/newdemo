@@ -7,7 +7,7 @@ import { LandingPage } from './pages/Landing';
 import { DashboardPage } from './pages/Dashboard';
 import { DetectionPage } from './pages/Detection';
 import { BatchPage } from './pages/Batch';
-import { LivePage } from './pages/Live';
+import { DepthAnalysisPage } from './pages/DepthAnalysis';
 import { MapPage } from './pages/Map';
 import { NavigatePage } from './pages/Navigate';
 import { AlertsPage } from './pages/Alerts';
@@ -27,7 +27,8 @@ function Page({ page }: { page: string }) {
     case 'overview': return <DashboardPage />;
     case 'detection': return <DetectionPage />;
     case 'batch': return <BatchPage />;
-    case 'live': return <LivePage />;
+    case 'depth': return <DepthAnalysisPage />;
+    case 'live': return <DepthAnalysisPage />;
     case 'map': return <MapPage />;
     case 'navigate': return <NavigatePage />;
     case 'alerts': return <AlertsPage />;
