@@ -484,10 +484,10 @@ export function useClock(interval = 1000): number {
   return t;
 }
 
-export function Select({ value, onChange, options, id, className }: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; id?: string; className?: string }) {
+export function Select({ value, onChange, options, id, className, style }: { value: string; onChange: (v: string) => void; options: { value: string; label: string }[]; id?: string; className?: string; style?: CSSProperties }) {
   const uid = useId();
   return (
-    <select id={id ?? uid} className={cx('select', className)} value={value} onChange={(e) => onChange(e.target.value)}>
+    <select id={id ?? uid} className={cx('select', className)} style={style} value={value} onChange={(e) => onChange(e.target.value)}>
       {options.map((o) => (
         <option key={o.value} value={o.value}>{o.label}</option>
       ))}

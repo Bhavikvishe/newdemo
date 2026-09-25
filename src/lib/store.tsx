@@ -12,6 +12,7 @@ import type {
   SettingsConfig,
   SignupInput,
   ToastItem,
+  InterdepartmentalAidRecord,
 } from '../types';
 import { navigate } from './router';
 import {
@@ -19,8 +20,10 @@ import {
   sessionFor,
   deptById,
   deptColor,
+  OPERATORS,
 } from './mock';
 import { makeT } from './i18n';
+import { clearCachedImages } from './detect';
 
 const STORE_KEY = 'oceonix.store.v1';
 
@@ -35,6 +38,7 @@ interface PersistShape {
   notifications: AppNotification[];
   tourIntroSeen: boolean;
   registeredUsers: RegisteredUser[];
+  aidHistory?: InterdepartmentalAidRecord[];
 }
 
 const DEFAULT_SETTINGS: SettingsConfig = {
@@ -56,7 +60,7 @@ const DEFAULT_SETTINGS: SettingsConfig = {
   },
   theme: 'dark',
   animationLevel: 'full',
-  demoMode: true,
+  demoMode: false,
 };
 
 function loadPersist(): PersistShape | null {
@@ -65,11 +69,16 @@ function loadPersist(): PersistShape | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as PersistShape;
     if (!parsed.detections || !Array.isArray(parsed.detections)) return null;
-    const real = parsed.detections.filter((d) => d.source === 'upload');
+    // Keep only genuine real model detections, filtering out synthetic mock/demo detections
+    const real = parsed.detections.filter((d) => d.source === 'upload' && (d.isRealModel || d.id?.startsWith('REAL-') || d.id?.startsWith('BATCH-REAL-')));
     const kept = new Set(real.map((d) => d.id));
     parsed.detections = real;
     parsed.alerts = (parsed.alerts ?? []).filter((a) => kept.has(a.detectionId));
     parsed.notifications = (parsed.notifications ?? []).filter((n) => !n.detectionId || kept.has(n.detectionId));
+    parsed.aidHistory = parsed.aidHistory ?? [];
+    if (parsed.settings) {
+      parsed.settings.demoMode = false;
+    }
     return parsed;
   } catch {
     return null;
@@ -91,9 +100,14 @@ interface StoreApi {
   notifications: AppNotification[];
   toasts: ToastItem[];
   registeredUsers: RegisteredUser[];
+  aidHistory: InterdepartmentalAidRecord[];
   login: (username: string, dept: DepartmentId, password?: string) => boolean;
   register: (input: SignupInput) => { ok: boolean; error?: string };
   assignTask: (alertId: string, department: DepartmentId, operator: string) => void;
+  interdepartmentalTransfer: (alertId: string, fromDept: DepartmentId, toDept: DepartmentId, targetOperator: string, reason: string) => boolean;
+  autoBalanceWorkload: (targetOverloadedDept?: DepartmentId) => { transferredCount: number; summary: string };
+  requestInterdepartmentalAid: (dept: DepartmentId, note?: string) => void;
+  seedSurgeScenario: () => void;
   logout: () => void;
   setTheme: (t: 'dark' | 'light') => void;
   setLanguage: (l: Language) => void;
@@ -119,6 +133,7 @@ interface StoreApi {
   openTour: () => void;
   closeTour: () => void;
   clearAll: () => void;
+  clearDetectionHistory: () => void;
 }
 
 const Ctx = createContext<StoreApi | null>(null);
@@ -141,6 +156,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<AppNotification[]>(persisted.current?.notifications ?? []);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const [registeredUsers, setRegisteredUsers] = useState<RegisteredUser[]>(persisted.current?.registeredUsers ?? []);
+  const [aidHistory, setAidHistory] = useState<InterdepartmentalAidRecord[]>(persisted.current?.aidHistory ?? []);
 
   const t = makeT(language);
 
@@ -156,13 +172,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       notifications,
       tourIntroSeen: true,
       registeredUsers,
+      aidHistory,
     };
     try {
       localStorage.setItem(STORE_KEY, JSON.stringify(shape));
     } catch {
       /* storage unavailable */
     }
-  }, [user, theme, language, settings, onboardingSeen, detections, alerts, notifications, registeredUsers]);
+  }, [user, theme, language, settings, onboardingSeen, detections, alerts, notifications, registeredUsers, aidHistory]);
 
   useEffect(() => {
     save();
@@ -394,6 +411,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       detection: { ...a.detection, department },
       timeline: [...a.timeline, pushTimeline(a, 'assignment', 'System admin assignment', `Task assigned to ${target} — operator ${operator}.`, user?.name ?? 'System Admin')],
     }));
+    setDetections((ds) => ds.map((d) => (d.id === id ? { ...d, department } : d)));
     pushNotification({
       kind: 'case',
       title: t('stx.taskAssigned'),
@@ -402,6 +420,398 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     });
     addToast({ kind: 'success', title: t('stx.taskAssigned'), text: t('stx.taskAssignedText', { id, target, operator }) });
   }, [mutateAlert, pushNotification, addToast, user, language]);
+
+  const interdepartmentalTransfer = useCallback((
+    alertId: string,
+    fromDept: DepartmentId,
+    toDept: DepartmentId,
+    targetOperator: string,
+    reason: string
+  ) => {
+    const fromName = deptById(fromDept).shortName;
+    const toName = deptById(toDept).shortName;
+    const nowIso = new Date().toISOString();
+    let affectedDetId = '';
+
+    mutateAlert(alertId, (a) => {
+      affectedDetId = a.detectionId;
+      return {
+        ...a,
+        assignedDepartment: toDept,
+        assignedOperator: targetOperator,
+        status: a.status === 'resolved' ? a.status : 'assigned',
+        assignedAt: nowIso,
+        reassignedFromDepartment: fromDept,
+        interdepartmentalAid: {
+          fromDepartment: fromDept,
+          toDepartment: toDept,
+          transferredAt: nowIso,
+          transferredBy: user?.name ?? 'System Administrator',
+          reason: reason || 'Workload minimization and mutual aid redistribution',
+          targetOperator,
+        },
+        detection: {
+          ...a.detection,
+          department: toDept,
+        },
+        timeline: [
+          ...a.timeline,
+          {
+            id: `tl-${a.id}-${a.timeline.length}`,
+            type: 'interdepartmental_transfer',
+            title: `Interdepartmental Aid: ${fromName} → ${toName}`,
+            description: `Transferred to relieve ${fromName} workload. Assigned to ${targetOperator}. Reason: ${reason || 'Mutual aid capacity balancing'}.`,
+            timestamp: nowIso,
+            actor: user?.name ?? 'System Administrator',
+            department: toDept,
+            metadata: { fromDepartment: fromDept, toDepartment: toDept, operator: targetOperator, reason },
+          },
+        ],
+      };
+    });
+
+    if (affectedDetId) {
+      setDetections((ds) =>
+        ds.map((d) => (d.id === affectedDetId ? { ...d, department: toDept } : d))
+      );
+    }
+
+    const record: InterdepartmentalAidRecord = {
+      id: `aid-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      alertId,
+      detectionId: affectedDetId,
+      fromDepartment: fromDept,
+      toDepartment: toDept,
+      targetOperator,
+      reason: reason || 'Workload minimization and mutual aid redistribution',
+      timestamp: nowIso,
+      transferredBy: user?.name ?? 'System Administrator',
+      status: 'active',
+      reductionSummary: `Workload transferred from ${fromName} to ${toName}`,
+    };
+
+    setAidHistory((prev) => [record, ...prev]);
+
+    pushNotification({
+      kind: 'notice',
+      title: `⚡ Mutual Aid Transferred: ${alertId}`,
+      body: `Workload transferred from ${fromName} to ${toName} (${targetOperator}). Overload reduced.`,
+      dept: toDept,
+      alertId,
+    });
+
+    addToast({
+      kind: 'success',
+      title: 'Interdepartmental Aid Dispatched',
+      text: `${alertId} transferred from ${fromName} to ${toName} (${targetOperator}) to minimize workload.`,
+    });
+
+    return true;
+  }, [mutateAlert, pushNotification, addToast, user]);
+
+  const autoBalanceWorkload = useCallback((targetOverloadedDept?: DepartmentId) => {
+    const OPEN_STATUSES = ['new', 'unacknowledged', 'pending', 'assigned', 'in_progress', 'manual_verification', 'overdue', 'escalated'];
+    const activeAlerts = alerts.filter((a) => OPEN_STATUSES.includes(a.status));
+    const deptLoads: Record<DepartmentId, number> = {
+      'marine-operations': 0,
+      'marine-engineering': 0,
+      'marine-environmental': 0,
+      'search-rescue': 0,
+      'ocean-survey': 0,
+      'recovery-response': 0,
+      'system-admin': 0,
+    };
+    activeAlerts.forEach((a) => {
+      deptLoads[a.detection.department] = (deptLoads[a.detection.department] ?? 0) + 1;
+    });
+
+    const operationalDepts: DepartmentId[] = [
+      'marine-operations',
+      'marine-engineering',
+      'marine-environmental',
+      'search-rescue',
+      'ocean-survey',
+      'recovery-response',
+    ];
+
+    let overloaded = targetOverloadedDept;
+    if (!overloaded) {
+      const sorted = [...operationalDepts].sort((a, b) => deptLoads[b] - deptLoads[a]);
+      if (sorted.length > 0 && deptLoads[sorted[0]] >= 2) {
+        overloaded = sorted[0];
+      }
+    }
+
+    if (!overloaded || deptLoads[overloaded] <= 1) {
+      addToast({
+        kind: 'info',
+        title: 'Fleet Already Balanced',
+        text: 'Department workloads are within optimal capacity. No critical overloads detected.',
+      });
+      return { transferredCount: 0, summary: 'Workloads already balanced.' };
+    }
+
+    const candidates = activeAlerts.filter(
+      (a) => a.detection.department === overloaded && (!a.assignedOperator || a.status !== 'in_progress')
+    );
+    const pool = candidates.length > 0 ? candidates : activeAlerts.filter((a) => a.detection.department === overloaded);
+    const countToMove = Math.min(pool.length, Math.max(1, Math.floor(deptLoads[overloaded] / 2)));
+    const toMoveList = pool.slice(0, countToMove);
+
+    if (toMoveList.length === 0) {
+      addToast({
+        kind: 'info',
+        title: 'No Transferable Tasks',
+        text: `All open tasks in ${deptById(overloaded).shortName} are actively in field operations.`,
+      });
+      return { transferredCount: 0, summary: 'No transferable tasks available.' };
+    }
+
+    const helperCandidates = operationalDepts
+      .filter((d) => d !== overloaded)
+      .sort((a, b) => deptLoads[a] - deptLoads[b]);
+
+    let transferred = 0;
+    toMoveList.forEach((alert, idx) => {
+      const helperDept = helperCandidates[idx % helperCandidates.length];
+      const availableOps = [...(OPERATORS[helperDept] ?? []), ...registeredUsers.filter((r) => r.department === helperDept).map((r) => r.name)];
+      const targetOp = availableOps[0] ?? 'Duty Officer';
+      interdepartmentalTransfer(
+        alert.id,
+        overloaded!,
+        helperDept,
+        targetOp,
+        `Automated fleet rebalancing to relieve ${deptById(overloaded!).shortName} surge`
+      );
+      deptLoads[overloaded!] -= 1;
+      deptLoads[helperDept] += 1;
+      transferred += 1;
+    });
+
+    addToast({
+      kind: 'success',
+      title: 'Fleet Workload Rebalanced',
+      text: `Successfully redistributed ${transferred} tasks from ${deptById(overloaded).shortName} to relieve department overload.`,
+    });
+
+    return {
+      transferredCount: transferred,
+      summary: `Redistributed ${transferred} tasks to minimize workload.`,
+    };
+  }, [alerts, registeredUsers, interdepartmentalTransfer, addToast]);
+
+  const requestInterdepartmentalAid = useCallback((dept: DepartmentId, note?: string) => {
+    const deptInfo = deptById(dept);
+    pushNotification({
+      kind: 'alert',
+      title: `⚡ Mutual Aid Requested: ${deptInfo.shortName}`,
+      body: `${deptInfo.name} has requested interdepartmental assistance due to elevated workload (${note || 'Surge backlog'}).`,
+      dept: 'system-admin',
+    });
+    addToast({
+      kind: 'alert',
+      title: 'Interdepartmental Aid Requested',
+      text: `Request for mutual aid dispatched to System Administrator. Workload rebalancing queued.`,
+    });
+  }, [pushNotification, addToast]);
+
+  const seedSurgeScenario = useCallback(() => {
+    const surgeDetections: Detection[] = [
+      {
+        id: `SURGE-DET-01`,
+        imageId: 'ghost_net_cluster_alpha.png',
+        className: 'ghost_fishing_gear',
+        confidence: 0.88,
+        boundingBox: { x: 0.25, y: 0.35, width: 0.45, height: 0.35, normalized: true },
+        gps: { latitude: 18.9413, longitude: 72.8495, accuracy: 2, timestamp: new Date().toISOString() },
+        estimatedSize: { length: 12.5, width: 6.2, height: 2.1, unit: 'm' },
+        estimatedWeight: { min: 850, max: 2200, unit: 'kg', confidence: 0.88 },
+        riskLevel: 'high',
+        riskScore: 82,
+        priority: 2,
+        responseDeadline: new Date(Date.now() + 24 * 3600e3).toISOString(),
+        department: 'marine-environmental',
+        recommendedEquipment: ['Net Recovery Rig', 'ROV Claw', 'Marker Buoy'],
+        removalMethod: 'Cut free & recover netting; log entangled fauna',
+        verificationStatus: 'pending',
+        notes: 'Dense ghost fishing gear cluster threatening marine sanctuary corridor.',
+        detectionTime: new Date(Date.now() - 3600e3 * 2).toISOString(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        aiPrediction: true,
+        estimated: true,
+        recommended: true,
+        source: 'upload',
+        manualVerificationRequired: false,
+        isRealModel: true,
+        rawLabel: 'ghost_fishing_gear',
+      },
+      {
+        id: `SURGE-DET-02`,
+        imageId: 'trawl_debris_beta.png',
+        className: 'ghost_fishing_gear',
+        confidence: 0.79,
+        boundingBox: { x: 0.15, y: 0.2, width: 0.35, height: 0.4, normalized: true },
+        gps: { latitude: 18.9321, longitude: 72.8612, accuracy: 3, timestamp: new Date().toISOString() },
+        estimatedSize: { length: 8.0, width: 4.5, height: 1.8, unit: 'm' },
+        estimatedWeight: { min: 450, max: 1200, unit: 'kg', confidence: 0.79 },
+        riskLevel: 'medium',
+        riskScore: 68,
+        priority: 3,
+        responseDeadline: new Date(Date.now() + 36 * 3600e3).toISOString(),
+        department: 'marine-environmental',
+        recommendedEquipment: ['Salvage Winch', 'Debris Container'],
+        removalMethod: 'Surface tow and barge collection',
+        verificationStatus: 'pending',
+        notes: 'Abandoned gillnet entanglement drifting near shipping channel.',
+        detectionTime: new Date(Date.now() - 3600e3 * 3).toISOString(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        aiPrediction: true,
+        estimated: true,
+        recommended: true,
+        source: 'upload',
+        manualVerificationRequired: false,
+        isRealModel: true,
+        rawLabel: 'ghost_fishing_gear',
+      },
+      {
+        id: `SURGE-DET-03`,
+        imageId: 'plastic_debris_gamma.png',
+        className: 'cylinder',
+        confidence: 0.74,
+        boundingBox: { x: 0.4, y: 0.4, width: 0.25, height: 0.3, normalized: true },
+        gps: { latitude: 18.9189, longitude: 72.8254, accuracy: 2, timestamp: new Date().toISOString() },
+        estimatedSize: { length: 3.2, width: 1.4, height: 1.4, unit: 'm' },
+        estimatedWeight: { min: 280, max: 650, unit: 'kg', confidence: 0.74 },
+        riskLevel: 'medium',
+        riskScore: 60,
+        priority: 3,
+        responseDeadline: new Date(Date.now() + 48 * 3600e3).toISOString(),
+        department: 'marine-environmental',
+        recommendedEquipment: ['ROV Clamping Arm', 'Lifting Sling'],
+        removalMethod: 'Mechanical crane lift into waste repository',
+        verificationStatus: 'pending',
+        notes: 'Corroded industrial cylinder emitting particulate debris plume.',
+        detectionTime: new Date(Date.now() - 3600e3 * 5).toISOString(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        aiPrediction: true,
+        estimated: true,
+        recommended: true,
+        source: 'upload',
+        manualVerificationRequired: false,
+        isRealModel: true,
+        rawLabel: 'cylinder',
+      },
+      {
+        id: `SURGE-DET-04`,
+        imageId: 'monofilament_net_delta.png',
+        className: 'ghost_fishing_gear',
+        confidence: 0.84,
+        boundingBox: { x: 0.3, y: 0.25, width: 0.4, height: 0.45, normalized: true },
+        gps: { latitude: 18.9554, longitude: 72.8721, accuracy: 2, timestamp: new Date().toISOString() },
+        estimatedSize: { length: 15.0, width: 7.0, height: 3.0, unit: 'm' },
+        estimatedWeight: { min: 1100, max: 3100, unit: 'kg', confidence: 0.84 },
+        riskLevel: 'critical',
+        riskScore: 92,
+        priority: 1,
+        responseDeadline: new Date(Date.now() + 12 * 3600e3).toISOString(),
+        department: 'marine-environmental',
+        recommendedEquipment: ['Heavy Net Cutter', 'Diver Support Craft'],
+        removalMethod: 'Multi-vessel coordinated haul and containment',
+        verificationStatus: 'pending',
+        notes: 'Critical large-scale net fouling near coral restoration sector.',
+        detectionTime: new Date(Date.now() - 3600e3 * 1).toISOString(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        aiPrediction: true,
+        estimated: true,
+        recommended: true,
+        source: 'upload',
+        manualVerificationRequired: false,
+        isRealModel: true,
+        rawLabel: 'ghost_fishing_gear',
+      },
+      {
+        id: `SURGE-DET-05`,
+        imageId: 'sunken_debris_epsilon.png',
+        className: 'shipwreck',
+        confidence: 0.81,
+        boundingBox: { x: 0.2, y: 0.3, width: 0.5, height: 0.4, normalized: true },
+        gps: { latitude: 18.905, longitude: 72.812, accuracy: 3, timestamp: new Date().toISOString() },
+        estimatedSize: { length: 22.0, width: 8.5, height: 5.0, unit: 'm' },
+        estimatedWeight: { min: 8000, max: 15000, unit: 'kg', confidence: 0.81 },
+        riskLevel: 'high',
+        riskScore: 78,
+        priority: 2,
+        responseDeadline: new Date(Date.now() + 40 * 3600e3).toISOString(),
+        department: 'marine-operations',
+        recommendedEquipment: ['Heavy Salvage Crane', 'Survey ROV'],
+        removalMethod: 'Controlled structural tethering and salvage clearance',
+        verificationStatus: 'pending',
+        notes: 'Submerged wooden barge hull obstructing navigation line.',
+        detectionTime: new Date(Date.now() - 3600e3 * 6).toISOString(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        aiPrediction: true,
+        estimated: true,
+        recommended: true,
+        source: 'upload',
+        manualVerificationRequired: false,
+        isRealModel: true,
+        rawLabel: 'shipwreck',
+      },
+    ];
+
+    const surgeAlerts: Alert[] = surgeDetections.map((det, i) => {
+      const alertId = `AL-SRG${i + 1}`;
+      return {
+        id: alertId,
+        alertId,
+        detectionId: det.id,
+        detection: det,
+        status: (i === 0 ? 'new' : i === 1 ? 'unacknowledged' : i === 2 ? 'pending' : i === 3 ? 'new' : 'assigned') as AlertStatus,
+        priority: det.priority,
+        assignedDepartment: det.department,
+        assignedOperator: i === 4 ? 'Capt. Verma' : undefined,
+        escalationDepartment: det.department === 'marine-environmental' ? 'recovery-response' : 'marine-operations',
+        responseDeadline: det.responseDeadline,
+        overdue: false,
+        timeline: [
+          {
+            id: `tl-${det.id}-0`,
+            type: 'detection',
+            title: 'Sonar Detection Triggered',
+            description: `Real acoustic return confirmed. ${det.rawLabel} detected.`,
+            timestamp: det.detectionTime,
+            actor: 'OCEONIX AI',
+            department: det.department,
+          },
+          {
+            id: `tl-${det.id}-1`,
+            type: 'assignment',
+            title: 'Initial Department Routing',
+            description: `Routed to ${deptById(det.department).name}.`,
+            timestamp: det.detectionTime,
+            actor: 'OCEONIX AI',
+            department: det.department,
+          },
+        ],
+        departmentNotes: [],
+        equipmentRequested: [],
+      };
+    });
+
+    setDetections((prev) => [...surgeDetections, ...prev.filter((p) => !p.id.startsWith('SURGE-'))]);
+    setAlerts((prev) => [...surgeAlerts, ...prev.filter((a) => !a.id.startsWith('AL-SRG'))]);
+
+    addToast({
+      kind: 'alert',
+      title: 'Operational Surge Simulated',
+      text: 'Marine Environmental Operations is at 160% capacity (4 open cases). Mutual aid balancing ready.',
+    });
+  }, [addToast]);
 
   const requestVerification = useCallback((id: string) => {
     mutateAlert(id, (a) => ({
@@ -511,6 +921,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     window.location.reload();
   }, []);
 
+  const clearDetectionHistory = useCallback(() => {
+    setDetections([]);
+    setAlerts([]);
+    setAidHistory([]);
+    clearCachedImages();
+    try {
+      const raw = localStorage.getItem(STORE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as PersistShape;
+        parsed.detections = [];
+        parsed.alerts = [];
+        parsed.aidHistory = [];
+        parsed.notifications = [];
+        localStorage.setItem(STORE_KEY, JSON.stringify(parsed));
+      }
+    } catch {
+      // ignore
+    }
+    addToast({
+      kind: 'success',
+      title: 'Detection History Cleared',
+      text: 'All detection records and associated alerts have been cleared.',
+    });
+  }, [addToast]);
+
   const api = useMemo<StoreApi>(() => ({
     user,
     theme,
@@ -523,9 +958,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     notifications,
     toasts,
     registeredUsers,
+    aidHistory,
     login,
     register,
     assignTask,
+    interdepartmentalTransfer,
+    autoBalanceWorkload,
+    requestInterdepartmentalAid,
+    seedSurgeScenario,
     logout,
     setTheme,
     setLanguage,
@@ -536,7 +976,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     dismissToast,
     dismissNotification,
     markNotificationsRead,
-recordDetection,
+    recordDetection,
     acknowledgeAlert,
     assignOperator,
     requestVerification,
@@ -551,7 +991,8 @@ recordDetection,
     openTour,
     closeTour,
     clearAll,
-  }), [user, theme, language, settings, onboardingSeen, tourOpen, detections, alerts, notifications, toasts, registeredUsers, login, register, assignTask, logout, setTheme, setLanguage, updateSettings, saveSettings, resetSettings, addToast, dismissToast, dismissNotification, markNotificationsRead, recordDetection, acknowledgeAlert, assignOperator, requestVerification, acceptCase, setAlertStatus, requestEquipment, addNote, escalateAlert, resolveAlert, verifyAlert, completeOnboarding, openTour, closeTour, clearAll]);
+    clearDetectionHistory,
+  }), [user, theme, language, settings, onboardingSeen, tourOpen, detections, alerts, notifications, toasts, registeredUsers, aidHistory, login, register, assignTask, interdepartmentalTransfer, autoBalanceWorkload, requestInterdepartmentalAid, seedSurgeScenario, logout, setTheme, setLanguage, updateSettings, saveSettings, resetSettings, addToast, dismissToast, dismissNotification, markNotificationsRead, recordDetection, acknowledgeAlert, assignOperator, requestVerification, acceptCase, setAlertStatus, requestEquipment, addNote, escalateAlert, resolveAlert, verifyAlert, completeOnboarding, openTour, closeTour, clearAll, clearDetectionHistory]);
 
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
 }

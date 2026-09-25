@@ -62,11 +62,11 @@ function filesToItems(files: File[]): BatchItem[] {
 
 export function BatchPage() {
   const store = useStore();
-  const { language, addToast, settings } = store;
+  const { language, addToast } = store;
   const t = makeT(language);
   const statusLabel = (s: BatchStatus) => t(STATUS_KEY[s]);
 
-  const [demoMode, setDemoMode] = useState(settings.demoMode);
+  const [demoMode, setDemoMode] = useState(false);
   const [confThreshold, setConfThreshold] = useState(0.25);
   const [items, setItems] = useState<BatchItem[]>([]);
   const [running, setRunning] = useState(false);
@@ -551,7 +551,7 @@ export function BatchPage() {
       <PageHead
         kicker={t('batch.title')}
         title={t('nav.batch')}
-        sub={demoMode ? 'Batch Scan (Demo Mode / Simulated)' : 'Batch Scan (Real AI Model: best.pt)'}
+        sub={demoMode ? 'Batch Scan (Demo Mode / Simulated Mock Detections)' : 'Batch Scan (Real AI Model: best.pt)'}
         right={
           <div className="row wrap" style={{ gap: 8, alignItems: 'center' }}>
             {/* Mode Switcher */}
@@ -562,7 +562,7 @@ export function BatchPage() {
               style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
             >
               <IconShield size={14} />
-              <span>{demoMode ? 'Switch to Real AI Model' : 'Mode: Real Model (best.pt)'}</span>
+              <span>{demoMode ? '⚠️ Switch to Real AI Model' : '✓ Real Model (best.pt)'}</span>
             </button>
 
             {/* Threshold Selector */}
@@ -608,6 +608,39 @@ export function BatchPage() {
           </div>
         }
       />
+
+      {demoMode && (
+        <div
+          style={{
+            background: 'rgba(234, 179, 8, 0.12)',
+            border: '1px solid rgba(234, 179, 8, 0.4)',
+            borderRadius: 8,
+            padding: '12px 18px',
+            marginBottom: 16,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+            color: '#fef08a',
+            fontSize: 13,
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <IconAlert size={20} />
+            <div>
+              <strong style={{ display: 'block', marginBottom: 2 }}>Simulation Mode Active (Mock Data)</strong>
+              <span>Batch scans in this mode run offline random simulations and do <em>not</em> send frames to the trained <code>best.pt</code> model.</span>
+            </div>
+          </div>
+          <button
+            onClick={toggleMode}
+            className="btn btn-sm btn-primary"
+            style={{ whiteSpace: 'nowrap' }}
+          >
+            Switch to Real AI Model (best.pt)
+          </button>
+        </div>
+      )}
 
       {/* Real Statistics Grid */}
       <div className="stat-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>

@@ -185,3 +185,7 @@ export function getCachedImage(key?: string): string | undefined {
   if (!key) return undefined;
   return imageCache.get(key);
 }
+
+export function clearCachedImages(): void {
+  imageCache.clear();
+}

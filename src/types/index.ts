@@ -187,11 +187,53 @@ export interface Alert {
   timeline: AlertTimelineEvent[];
   departmentNotes: DepartmentNote[];
   equipmentRequested: EquipmentRequest[];
+  originalDepartment?: DepartmentId;
+  reassignedFromDepartment?: DepartmentId;
+  interdepartmentalAid?: {
+    fromDepartment: DepartmentId;
+    toDepartment: DepartmentId;
+    transferredAt: string;
+    transferredBy: string;
+    reason: string;
+    targetOperator?: string;
+    originalQueueSize?: number;
+  };
+}
+
+export interface InterdepartmentalAidRecord {
+  id: string;
+  alertId: string;
+  detectionId: string;
+  fromDepartment: DepartmentId;
+  toDepartment: DepartmentId;
+  targetOperator: string;
+  reason: string;
+  timestamp: string;
+  transferredBy: string;
+  status: 'active' | 'completed';
+  reductionSummary?: string;
+}
+
+export interface DepartmentWorkloadInfo {
+  departmentId: DepartmentId;
+  name: string;
+  shortName: string;
+  color: string;
+  openTasks: number;
+  inProgressTasks: number;
+  criticalTasks: number;
+  overdueTasks: number;
+  rosterSize: number;
+  capacityLimit: number;
+  loadPercentage: number;
+  status: 'optimal' | 'elevated' | 'overloaded';
+  isHelperEligible: boolean;
+  requiresHelp: boolean;
 }
 
 export interface AlertTimelineEvent {
   id: string;
-  type: 'detection' | 'analysis' | 'verification' | 'assignment' | 'response' | 'resolution' | 'escalation' | 'note' | 'equipment_request';
+  type: 'detection' | 'analysis' | 'verification' | 'assignment' | 'response' | 'resolution' | 'escalation' | 'note' | 'equipment_request' | 'interdepartmental_transfer';
   title: string;
   description: string;
   timestamp: string;

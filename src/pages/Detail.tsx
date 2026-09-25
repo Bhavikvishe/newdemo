@@ -67,6 +67,46 @@ export function DetailPage() {
         }
       />
 
+      {alert?.interdepartmentalAid && (
+        <div
+          style={{
+            background: 'linear-gradient(135deg, rgba(0, 240, 255, 0.12), rgba(2, 6, 12, 0.95))',
+            border: '1.5px solid rgba(0, 240, 255, 0.45)',
+            borderRadius: 12,
+            padding: '14px 18px',
+            marginBottom: 16,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: 12,
+            boxShadow: '0 4px 16px rgba(0, 240, 255, 0.12)',
+          }}
+        >
+          <div>
+            <div className="row" style={{ gap: 8, alignItems: 'center', marginBottom: 4 }}>
+              <span className="badge b-accent" style={{ fontSize: 10.5, fontWeight: 700 }}>
+                ⚡ INTERDEPARTMENTAL MUTUAL AID ACTIVE
+              </span>
+              <b style={{ fontSize: 13.5 }}>
+                Transferred: {deptById(alert.interdepartmentalAid.fromDepartment).name} → {deptById(alert.interdepartmentalAid.toDepartment).name}
+              </b>
+            </div>
+            <p style={{ margin: 0, fontSize: 12.5, color: 'var(--ink-2)' }}>
+              Reassigned by System Administrator to minimize department workload and accelerate operational clearance.
+              Reason: <em>{alert.interdepartmentalAid.reason}</em>
+            </p>
+          </div>
+
+          <div className="row wrap" style={{ gap: 8 }}>
+            <span className="badge b-plain" style={{ fontSize: 11 }}>
+              Assigned Specialist: {alert.assignedOperator ?? alert.interdepartmentalAid.targetOperator}
+            </span>
+            <span className="tiny muted">{fmtDT(alert.interdepartmentalAid.transferredAt)}</span>
+          </div>
+        </div>
+      )}
+
       <div className="grid cols-12" style={{ gap: 16 }}>
         <div className="span-7 stack" style={{ gap: 16 }}>
           <Card>
@@ -323,6 +363,12 @@ export function DetailPage() {
                 {alert.acknowledgedAt && <Kv k={t('st.acknowledged')} v={fmtDT(alert.acknowledgedAt)} mono />}
                 {alert.resolvedAt && <Kv k={t('st.resolved')} v={fmtDT(alert.resolvedAt)} mono />}
                 {alert.verifiedAt && <Kv k={t('st.verified')} v={fmtDT(alert.verifiedAt)} mono />}
+                {alert.interdepartmentalAid && (
+                  <>
+                    <Kv k="Mutual Aid Origin" v={deptById(alert.interdepartmentalAid.fromDepartment).name} />
+                    <Kv k="Aid Justification" v={alert.interdepartmentalAid.reason} />
+                  </>
+                )}
               </div>
             )}
           </Card>

@@ -5,9 +5,9 @@ import { CLASS_LIST, CLASS_META, fmtCoordinate, fmtDT, timeAgo, toCSV, download 
 import { clsLabel, riskLabel } from '../lib/labels';
 import { renderFrame } from '../lib/sonar';
 import { getCachedImage } from '../lib/detect';
-import { PageHead, Card, Button, RiskBadge, ClassBadge, StatusBadge, Select, EmptyState } from '../lib/ui';
+import { PageHead, Card, Button, RiskBadge, ClassBadge, StatusBadge, Select, EmptyState, Modal } from '../lib/ui';
 import { Link } from '../lib/router';
-import { IconDoc, IconSearch } from '../components/Icons';
+import { IconDoc, IconSearch, IconTrash } from '../components/Icons';
 import type { Detection, RiskLevel } from '../types';
 
 const CATS = [
@@ -28,6 +28,7 @@ export function HistoryPage() {
   const [cat, setCat] = useState('all');
   const [risk, setRisk] = useState('<all>');
   const [limit, setLimit] = useState(200);
+  const [showConfirm, setShowConfirm] = useState(false);
 
   const framed = useMemo(() => {
     const m = new Map<string, string>();
@@ -77,8 +78,51 @@ export function HistoryPage() {
         kicker={t('his.title')}
         title={t('nav.history')}
         sub={t('his.sub', { count: detections.length })}
-        right={<Button variant="secondary" onClick={exportCsv}><IconDoc size={15} /> {t('his.export')}</Button>}
+        right={
+          <div className="row wrap" style={{ gap: 8 }}>
+            <Button
+              variant="secondary"
+              onClick={exportCsv}
+              disabled={detections.length === 0}
+            >
+              <IconDoc size={15} /> {t('his.export')}
+            </Button>
+            <Button
+              variant="danger"
+              onClick={() => setShowConfirm(true)}
+              disabled={detections.length === 0}
+              title="Clear all detection history"
+            >
+              <IconTrash size={15} /> Clear History
+            </Button>
+          </div>
+        }
       />
+
+      {showConfirm && (
+        <Modal onClose={() => setShowConfirm(false)} width={460}>
+          <div style={{ padding: 22 }}>
+            <h3 style={{ margin: '0 0 10px', color: 'var(--critical)' }}>Clear Detection History?</h3>
+            <p className="muted" style={{ fontSize: 13.5, lineHeight: 1.5, marginBottom: 20 }}>
+              This will permanently delete all <b>{detections.length}</b> recorded detections and clear the active history ledger. This action cannot be undone.
+            </p>
+            <div className="row" style={{ gap: 10, justifyContent: 'flex-end' }}>
+              <Button variant="secondary" onClick={() => setShowConfirm(false)}>
+                Cancel
+              </Button>
+              <Button
+                variant="danger"
+                onClick={() => {
+                  store.clearDetectionHistory();
+                  setShowConfirm(false);
+                }}
+              >
+                Yes, Clear All History
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
 
       <Card>
         <div className="row wrap" style={{ padding: '12px 14px', borderBottom: '1px solid var(--line-soft)', gap: 10 }}>
