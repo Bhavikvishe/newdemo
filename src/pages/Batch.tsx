@@ -171,15 +171,10 @@ export function BatchPage() {
 
           let createdDetectionId: string | undefined = undefined;
 
-          // If real objects found, record a primary Detection entity in store.
-          // GPS must come from image metadata returned by the backend.
-          // Never derive coordinates from a YOLO bounding box.
-          if (detCount > 0 && primaryPred && primaryMapped) {
-            if (!resp.gps) {
-              throw new Error(
-                `No GPS metadata found in ${targetFilename}. Add EXIF GPS coordinates and retry this frame.`,
-              );
-            }
+          // Record the detection in the application store only when GPS is available.
+          // Missing GPS must NOT block YOLO inference or mark the batch item as failed.
+          // The scan can still complete and show predictions/bounding boxes without geolocation.
+          if (detCount > 0 && primaryPred && primaryMapped && resp.gps) {
             const meta = CLASS_META[primaryMapped];
             const dataUrl = await fileToDataUrl(targetFile);
             const imageSrc = dataUrl || nextItem.previewUrl;
@@ -197,7 +192,13 @@ export function BatchPage() {
               className: primaryMapped,
               confidence: primaryPred.confidence,
               boundingBox: { ...primaryPred.bbox, normalized: true },
-              gps: resp.gps,
+              gps: {
+                latitude: resp.gps.latitude,
+                longitude: resp.gps.longitude,
+                accuracy: resp.gps.accuracy,
+                timestamp: resp.gps.timestamp,
+                source: resp.gps.source ?? 'exif',
+              },
               estimatedSize: {
                 length: +(primaryPred.bbox.width * 25).toFixed(1),
                 width: +(primaryPred.bbox.height * 12).toFixed(1),
@@ -865,6 +866,18 @@ export function BatchPage() {
                       <span className="muted tiny">Awaiting scan</span>
                     )}
                   </div>
+
+                  {it.status === 'completed' && it.detectionCount > 0 && !reportDetection && (
+                    <div
+                      className="tiny"
+                      style={{
+                        marginTop: 6,
+                        color: 'var(--ink-3)',
+                      }}
+                    >
+                      GPS unavailable — scan result is not geolocated.
+                    </div>
+                  )}
 
                   {/* Progress Bar */}
                   <div style={{ marginTop: 8 }}>
