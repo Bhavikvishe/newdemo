@@ -1,8 +1,23 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+
 import { useStore } from '../lib/store';
 import { makeT } from '../lib/i18n';
-import { CLASS_LIST, CLASS_META, SITES, fmtCoordinate, fmtDT } from '../lib/mock';
-import { clsLabel, riskLabel } from '../lib/labels';
+import {
+  CLASS_LIST,
+  CLASS_META,
+  fmtCoordinate,
+  fmtDT,
+} from '../lib/mock';
+import {
+  clsLabel,
+  riskLabel,
+} from '../lib/labels';
+
 import {
   PageHead,
   Card,
@@ -15,10 +30,23 @@ import {
   Select,
   Field,
 } from '../lib/ui';
+
 import { Link } from '../lib/router';
-import { IconScan, IconPin, IconTarget } from '../components/Icons';
+
+import {
+  IconScan,
+  IconPin,
+  IconTarget,
+} from '../components/Icons';
+
 import { GeoOceanMap } from '../components/GeoMap';
-import type { Detection, DetectionClass, RiskLevel } from '../types';
+
+import type {
+  Detection,
+  DetectionClass,
+  RiskLevel,
+} from '../types';
+
 import {
   LAT_MIN,
   LAT_MAX,
@@ -27,10 +55,6 @@ import {
   W,
   H,
   project,
-  WEST_COAST,
-  EAST_COAST,
-  ANDAMAN,
-  pathFrom,
   haversineKm,
   haversineNm,
   bearingDeg,
@@ -41,7 +65,12 @@ import {
   fmtDistanceNm,
 } from '../lib/geo';
 
-const RISK_ALL: RiskLevel[] = ['critical', 'high', 'medium', 'low'];
+const RISK_ALL: RiskLevel[] = [
+  'critical',
+  'high',
+  'medium',
+  'low',
+];
 
 interface Cluster {
   key: string;
@@ -58,12 +87,20 @@ interface NavigationTarget {
   detectionId?: string;
 }
 
-const DEMO_ORIGIN = {
+interface VesselPosition {
+  lat: number;
+  lng: number;
+  accuracy?: number;
+}
+
+const DEFAULT_SIMULATION_ORIGIN: VesselPosition = {
   lat: 15.42,
   lng: 73.62,
 };
 
-function storeNavigationTarget(target: NavigationTarget | null) {
+function storeNavigationTarget(
+  target: NavigationTarget | null,
+) {
   try {
     if (target) {
       localStorage.setItem(
@@ -71,7 +108,9 @@ function storeNavigationTarget(target: NavigationTarget | null) {
         JSON.stringify(target),
       );
     } else {
-      localStorage.removeItem('oceonix.nav.target');
+      localStorage.removeItem(
+        'oceonix.nav.target',
+      );
     }
   } catch {
     // Ignore localStorage errors.
@@ -80,141 +119,240 @@ function storeNavigationTarget(target: NavigationTarget | null) {
 
 function readNavigationTarget(): NavigationTarget | null {
   try {
-    const raw = localStorage.getItem('oceonix.nav.target');
+    const raw = localStorage.getItem(
+      'oceonix.nav.target',
+    );
 
-    if (!raw) return null;
-
-    const parsed = JSON.parse(raw) as NavigationTarget;
-
-    if (
-      typeof parsed?.lat === 'number' &&
-      typeof parsed?.lng === 'number'
-    ) {
-      return parsed;
+    if (!raw) {
+      return null;
     }
 
-    return null;
+    const parsed = JSON.parse(
+      raw,
+    ) as Partial<NavigationTarget>;
+
+    if (
+      typeof parsed.lat !== 'number' ||
+      typeof parsed.lng !== 'number'
+    ) {
+      return null;
+    }
+
+    if (
+      !Number.isFinite(parsed.lat) ||
+      !Number.isFinite(parsed.lng)
+    ) {
+      return null;
+    }
+
+    return {
+      lat: parsed.lat,
+      lng: parsed.lng,
+      label:
+        typeof parsed.label === 'string'
+          ? parsed.label
+          : 'Navigation target',
+      src:
+        parsed.src === 'detection'
+          ? 'detection'
+          : 'manual',
+      detectionId:
+        typeof parsed.detectionId === 'string'
+          ? parsed.detectionId
+          : undefined,
+    };
   } catch {
     return null;
   }
 }
 
+function isInsideMapBounds(
+  lat: number,
+  lng: number,
+) {
+  return (
+    lat >= LAT_MIN &&
+    lat <= LAT_MAX &&
+    lng >= LON_MIN &&
+    lng <= LON_MAX
+  );
+}
+
 export function MapPage() {
   const store = useStore();
-  const { detections, language } = store;
+  const {
+    detections,
+    language,
+  } = store;
+
   const t = makeT(language);
 
-  /* -------------------------------------------------------
-   * Existing map state
-   * ----------------------------------------------------- */
+  /*
+   * -------------------------------------------------------
+   * Detection map state
+   * -------------------------------------------------------
+   */
 
-  const [classes, setClasses] = useState<string[]>(
-    CLASS_LIST.map((c) => c),
-  );
+  const [classes, setClasses] =
+    useState<DetectionClass[]>(
+      [...CLASS_LIST],
+    );
 
-  const [risks, setRisks] = useState<string[]>(RISK_ALL);
+  const [risks, setRisks] =
+    useState<RiskLevel[]>(
+      [...RISK_ALL],
+    );
 
-  const [window, setWindow] = useState('all');
+  const [timeWindow, setTimeWindow] =
+    useState('all');
 
-  const [layer, setLayer] = useState<
-    'sonar' | 'satellite' | 'chart'
-  >('sonar');
+  const [layer, setLayer] =
+    useState<
+      'sonar' | 'satellite' | 'chart'
+    >('sonar');
 
   const [selected, setSelected] =
     useState<Cluster | null>(null);
 
-  const [search, setSearch] = useState('');
+  const [search, setSearch] =
+    useState('');
 
-  /* -------------------------------------------------------
+  /*
+   * -------------------------------------------------------
    * Navigation state
-   * ----------------------------------------------------- */
+   * -------------------------------------------------------
+   */
 
-  const [savedTarget] = useState<NavigationTarget | null>(
-    readNavigationTarget,
-  );
+  const [savedTarget] =
+    useState<NavigationTarget | null>(
+      readNavigationTarget,
+    );
 
   const [target, setTarget] =
     useState<NavigationTarget | null>(
-      savedTarget ?? {
-        label: t('ngx.manualTarget'),
-        lat: 18.6,
-        lng: 72.98,
-        src: 'manual',
-      },
+      savedTarget,
     );
 
-  const [pickedDetection, setPickedDetection] = useState(
-    savedTarget?.detectionId ?? '',
-  );
+  const [pickedDetection, setPickedDetection] =
+    useState(
+      savedTarget?.detectionId ?? '',
+    );
 
-  const [latInput, setLatInput] = useState(
-    target ? String(target.lat) : '',
-  );
+  const [latInput, setLatInput] =
+    useState(
+      savedTarget
+        ? String(savedTarget.lat)
+        : '',
+    );
 
-  const [lngInput, setLngInput] = useState(
-    target ? String(target.lng) : '',
-  );
+  const [lngInput, setLngInput] =
+    useState(
+      savedTarget
+        ? String(savedTarget.lng)
+        : '',
+    );
 
-  const [myPosition, setMyPosition] = useState<{
-    lat: number;
-    lng: number;
-    accuracy?: number;
-  } | null>(null);
+  /*
+   * -------------------------------------------------------
+   * Vessel GPS
+   * -------------------------------------------------------
+   */
 
-  const [locationState, setLocationState] = useState<
-    'idle' | 'locating' | 'live' | 'denied'
-  >('idle');
+  const [myPosition, setMyPosition] =
+    useState<VesselPosition | null>(
+      null,
+    );
 
-  const [gpsEnabled, setGpsEnabled] = useState(false);
+  const [locationState, setLocationState] =
+    useState<
+      'idle' |
+      'locating' |
+      'live' |
+      'denied'
+    >('idle');
 
-  const [vesselSpeed, setVesselSpeed] = useState(12);
+  const [gpsEnabled, setGpsEnabled] =
+    useState(false);
 
-  const watchRef = useRef<number | null>(null);
+  const [vesselSpeed, setVesselSpeed] =
+    useState(12);
 
-  /* -------------------------------------------------------
+  const watchRef =
+    useRef<number | null>(null);
+
+  /*
+   * -------------------------------------------------------
    * Persist navigation target
-   * ----------------------------------------------------- */
+   * -------------------------------------------------------
+   */
 
   useEffect(() => {
     storeNavigationTarget(target);
   }, [target]);
 
-  /* -------------------------------------------------------
+  /*
+   * -------------------------------------------------------
    * GPS tracking
-   * ----------------------------------------------------- */
+   * -------------------------------------------------------
+   */
 
   useEffect(() => {
-    if (!gpsEnabled) return;
-
-    if (!('geolocation' in navigator)) {
-      setLocationState('denied');
+    if (!gpsEnabled) {
       return;
     }
 
-    setLocationState('locating');
+    if (
+      !(
+        'geolocation' in
+        navigator
+      )
+    ) {
+      setLocationState(
+        'denied',
+      );
+      return;
+    }
 
-    watchRef.current = navigator.geolocation.watchPosition(
-      (position) => {
-        setMyPosition({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-        });
-
-        setLocationState('live');
-      },
-      () => {
-        setLocationState('denied');
-      },
-      {
-        enableHighAccuracy: true,
-        maximumAge: 5000,
-        timeout: 12000,
-      },
+    setLocationState(
+      'locating',
     );
 
+    watchRef.current =
+      navigator.geolocation.watchPosition(
+        (position) => {
+          setMyPosition({
+            lat:
+              position.coords
+                .latitude,
+            lng:
+              position.coords
+                .longitude,
+            accuracy:
+              position.coords
+                .accuracy,
+          });
+
+          setLocationState(
+            'live',
+          );
+        },
+        () => {
+          setLocationState(
+            'denied',
+          );
+        },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 5000,
+          timeout: 12000,
+        },
+      );
+
     return () => {
-      if (watchRef.current !== null) {
+      if (
+        watchRef.current !==
+        null
+      ) {
         navigator.geolocation.clearWatch(
           watchRef.current,
         );
@@ -225,267 +363,442 @@ export function MapPage() {
   }, [gpsEnabled]);
 
   const toggleGps = () => {
-    if (!gpsEnabled) {
-      if (!('geolocation' in navigator)) {
-        setLocationState('denied');
-        return;
-      }
-
-      setLocationState('locating');
-    }
-
-    setGpsEnabled((enabled) => !enabled);
-  };
-
-  /* -------------------------------------------------------
-   * Navigation origin
-   * ----------------------------------------------------- */
-
-  const origin = useMemo(
-    () => myPosition ?? DEMO_ORIGIN,
-    [myPosition],
-  );
-
-  /* -------------------------------------------------------
-   * Navigation metrics
-   * ----------------------------------------------------- */
-
-  const navigationMetrics = useMemo(() => {
-    if (!target) return null;
-
-    const km = haversineKm(
-      origin.lat,
-      origin.lng,
-      target.lat,
-      target.lng,
-    );
-
-    const nm = haversineNm(
-      origin.lat,
-      origin.lng,
-      target.lat,
-      target.lng,
-    );
-
-    const bearing = bearingDeg(
-      origin.lat,
-      origin.lng,
-      target.lat,
-      target.lng,
-    );
-
-    return {
-      km,
-      nm,
-      bearing,
-      eta: fmtETA(nm, vesselSpeed),
-    };
-  }, [
-    origin,
-    target,
-    vesselSpeed,
-  ]);
-
-  /* -------------------------------------------------------
-   * Great-circle navigation route
-   * ----------------------------------------------------- */
-
-  const navigationRoute = useMemo(() => {
-    if (!target) return [];
-
-    return gcPoints(
-      origin.lat,
-      origin.lng,
-      target.lat,
-      target.lng,
-      40,
-    );
-  }, [origin, target]);
-
-  /* -------------------------------------------------------
-   * Navigation helpers
-   * ----------------------------------------------------- */
-
-  const applyNavigationTarget = (
-    nextTarget: NavigationTarget,
-  ) => {
-    setTarget(nextTarget);
-
-    setPickedDetection(
-      nextTarget.detectionId ?? '',
-    );
-
-    setLatInput(String(nextTarget.lat));
-    setLngInput(String(nextTarget.lng));
-  };
-
-  const submitManualTarget = () => {
-    const latitude = Number(latInput);
-    const longitude = Number(lngInput);
-
     if (
-      !Number.isFinite(latitude) ||
-      !Number.isFinite(longitude)
+      !gpsEnabled &&
+      !(
+        'geolocation' in
+        navigator
+      )
     ) {
+      setLocationState(
+        'denied',
+      );
       return;
     }
 
-    applyNavigationTarget({
-      lat: latitude,
-      lng: longitude,
-      label: `ROCK · ${fmtCoordinate(
-        latitude,
-        longitude,
-      )}`,
-      src: 'manual',
-    });
-  };
-
-  const selectDetectionTarget = (id: string) => {
-    setPickedDetection(id);
-
-    if (!id) return;
-
-    const detection = detections.find(
-      (item) => item.id === id,
+    setGpsEnabled(
+      (enabled) => !enabled,
     );
-
-    if (!detection) return;
-
-    applyNavigationTarget({
-      lat: detection.gps.latitude,
-      lng: detection.gps.longitude,
-      label: clsLabel(
-        detection.className,
-        language,
-      ),
-      src: 'detection',
-      detectionId: detection.id,
-    });
   };
+
+  /*
+   * -------------------------------------------------------
+   * Navigation origin
+   *
+   * Real browser/device GPS is preferred.
+   * If unavailable, the UI explicitly treats this as
+   * simulation/offline origin.
+   * -------------------------------------------------------
+   */
+
+  const origin =
+    myPosition ??
+    DEFAULT_SIMULATION_ORIGIN;
+
+  const usingSimulationOrigin =
+    !myPosition;
+
+  /*
+   * -------------------------------------------------------
+   * Navigation metrics
+   * -------------------------------------------------------
+   */
+
+  const navigationMetrics =
+    useMemo(() => {
+      if (!target) {
+        return null;
+      }
+
+      const km =
+        haversineKm(
+          origin.lat,
+          origin.lng,
+          target.lat,
+          target.lng,
+        );
+
+      const nm =
+        haversineNm(
+          origin.lat,
+          origin.lng,
+          target.lat,
+          target.lng,
+        );
+
+      const bearing =
+        bearingDeg(
+          origin.lat,
+          origin.lng,
+          target.lat,
+          target.lng,
+        );
+
+      return {
+        km,
+        nm,
+        bearing,
+        eta: fmtETA(
+          nm,
+          vesselSpeed,
+        ),
+      };
+    }, [
+      origin.lat,
+      origin.lng,
+      target,
+      vesselSpeed,
+    ]);
+
+  /*
+   * -------------------------------------------------------
+   * Great-circle navigation route
+   * -------------------------------------------------------
+   */
+
+  const navigationRoute =
+    useMemo(() => {
+      if (!target) {
+        return [];
+      }
+
+      return gcPoints(
+        origin.lat,
+        origin.lng,
+        target.lat,
+        target.lng,
+        40,
+      );
+    }, [
+      origin.lat,
+      origin.lng,
+      target,
+    ]);
+
+  /*
+   * -------------------------------------------------------
+   * Navigation helpers
+   * -------------------------------------------------------
+   */
+
+  const clearNavigationTarget =
+    () => {
+      setTarget(null);
+      setPickedDetection('');
+      setLatInput('');
+      setLngInput('');
+    };
+
+  const applyNavigationTarget =
+    (
+      nextTarget: NavigationTarget,
+    ) => {
+      setTarget(nextTarget);
+
+      setPickedDetection(
+        nextTarget.detectionId ??
+          '',
+      );
+
+      setLatInput(
+        String(nextTarget.lat),
+      );
+
+      setLngInput(
+        String(nextTarget.lng),
+      );
+    };
+
+  const submitManualTarget =
+    () => {
+      const latitude =
+        Number(latInput);
+
+      const longitude =
+        Number(lngInput);
+
+      if (
+        !Number.isFinite(
+          latitude,
+        ) ||
+        !Number.isFinite(
+          longitude,
+        )
+      ) {
+        return;
+      }
+
+      if (
+        !isInsideMapBounds(
+          latitude,
+          longitude,
+        )
+      ) {
+        return;
+      }
+
+      applyNavigationTarget({
+        lat: latitude,
+        lng: longitude,
+        label: `TARGET · ${fmtCoordinate(
+          latitude,
+          longitude,
+        )}`,
+        src: 'manual',
+      });
+    };
+
+  const selectDetectionTarget =
+    (id: string) => {
+      setPickedDetection(id);
+
+      if (!id) {
+        return;
+      }
+
+      const detection =
+        detections.find(
+          (item) =>
+            item.id === id,
+        );
+
+      if (!detection) {
+        return;
+      }
+
+      applyNavigationTarget({
+        lat:
+          detection.gps
+            .latitude,
+        lng:
+          detection.gps
+            .longitude,
+        label: clsLabel(
+          detection.className,
+          language,
+        ),
+        src: 'detection',
+        detectionId:
+          detection.id,
+      });
+    };
+
+  /*
+   * -------------------------------------------------------
+   * GPS labels
+   * -------------------------------------------------------
+   */
 
   const locationLabel =
     locationState === 'live'
       ? t('ngx.locLive')
-      : locationState === 'locating'
-        ? t('ngx.locLocating')
-        : locationState === 'denied'
-          ? t('ngx.locDenied')
+      : locationState ===
+          'locating'
+        ? t(
+            'ngx.locLocating',
+          )
+        : locationState ===
+            'denied'
+          ? t(
+              'ngx.locDenied',
+            )
           : t('ngx.locSim');
 
   const locationTone =
     locationState === 'live'
       ? 'var(--low)'
-      : locationState === 'locating'
+      : locationState ===
+          'locating'
         ? 'var(--medium)'
-        : locationState === 'denied'
+        : locationState ===
+            'denied'
           ? 'var(--critical)'
           : 'var(--accent)';
 
-  /* -------------------------------------------------------
-   * Existing map filtering
-   * ----------------------------------------------------- */
+  /*
+   * -------------------------------------------------------
+   * Detection filtering
+   * -------------------------------------------------------
+   */
 
-  const filtered = useMemo(() => {
-    const cutoff =
-      window === 'all'
-        ? 0
-        : window === '24h'
-          ? 24 * 3600e3
-          : window === '7d'
-            ? 7 * 24 * 3600e3
-            : 30 * 24 * 3600e3;
+  const filtered =
+    useMemo(() => {
+      const cutoff =
+        timeWindow === 'all'
+          ? 0
+          : timeWindow === '24h'
+            ? 24 *
+              3600e3
+            : timeWindow === '7d'
+              ? 7 *
+                24 *
+                3600e3
+              : 30 *
+                24 *
+                3600e3;
 
-    const now = Date.now();
+      const now =
+        Date.now();
 
-    return detections.filter(
-      (d) =>
-        classes.includes(d.className) &&
-        risks.includes(d.riskLevel) &&
-        (
-          cutoff === 0 ||
-          now -
-            new Date(d.detectionTime).getTime() <
-            cutoff
-        ),
-    );
-  }, [
-    detections,
-    classes,
-    risks,
-    window,
-  ]);
+      return detections.filter(
+        (detection) => {
+          const matchesClass =
+            classes.includes(
+              detection.className,
+            );
 
-  const clusters = useMemo(() => {
-    const groups = new Map<string, Cluster>();
+          const matchesRisk =
+            risks.includes(
+              detection.riskLevel,
+            );
 
-    filtered.forEach((d) => {
-      const key =
-        `${d.gps.latitude.toFixed(2)}|` +
-        `${d.gps.longitude.toFixed(2)}`;
+          const timestamp =
+            new Date(
+              detection.detectionTime,
+            ).getTime();
 
-      const existing = groups.get(key);
+          const matchesTime =
+            cutoff === 0 ||
+            now - timestamp <
+              cutoff;
 
-      if (existing) {
-        existing.detections.push(d);
-      } else {
-        groups.set(key, {
-          key,
-          lat: d.gps.latitude,
-          lng: d.gps.longitude,
-          detections: [d],
-        });
-      }
-    });
-
-    return Array.from(groups.values())
-      .map((cluster) => ({
-        ...cluster,
-        detections: [
-          ...cluster.detections,
-        ].sort((a, b) =>
-          a.detectionTime <
-          b.detectionTime
-            ? 1
-            : -1,
-        ),
-      }))
-      .sort(
-        (a, b) =>
-          b.detections.length -
-          a.detections.length,
+          return (
+            matchesClass &&
+            matchesRisk &&
+            matchesTime
+          );
+        },
       );
-  }, [filtered]);
+    }, [
+      detections,
+      classes,
+      risks,
+      timeWindow,
+    ]);
 
-  const focus = useMemo(() => {
-    if (!search.trim()) return null;
+  /*
+   * -------------------------------------------------------
+   * Detection clustering
+   * -------------------------------------------------------
+   *
+   * Two decimal places are retained for clustering so
+   * nearby detections are grouped without modifying their
+   * actual stored GPS coordinates.
+   * -------------------------------------------------------
+   */
 
-    const query =
-      search.trim().toUpperCase();
+  const clusters =
+    useMemo(() => {
+      const groups =
+        new Map<
+          string,
+          Cluster
+        >();
 
-    const found = detections.find(
-      (d) =>
-        d.id
-          .toUpperCase()
-          .includes(query),
-    );
+      filtered.forEach(
+        (detection) => {
+          const key =
+            `${detection.gps.latitude.toFixed(2)}|` +
+            `${detection.gps.longitude.toFixed(2)}`;
 
-    return found
-      ? clusters.find((cluster) =>
-          cluster.detections.some(
-            (d) => d.id === found.id,
+          const existing =
+            groups.get(key);
+
+          if (existing) {
+            existing.detections.push(
+              detection,
+            );
+            return;
+          }
+
+          groups.set(key, {
+            key,
+            lat:
+              detection.gps
+                .latitude,
+            lng:
+              detection.gps
+                .longitude,
+            detections: [
+              detection,
+            ],
+          });
+        },
+      );
+
+      return Array.from(
+        groups.values(),
+      )
+        .map((cluster) => ({
+          ...cluster,
+          detections: [
+            ...cluster.detections,
+          ].sort((a, b) =>
+            a.detectionTime <
+            b.detectionTime
+              ? 1
+              : -1,
           ),
+        }))
+        .sort(
+          (a, b) =>
+            b.detections.length -
+            a.detections.length,
+        );
+    }, [filtered]);
+
+  /*
+   * -------------------------------------------------------
+   * Search focus
+   * -------------------------------------------------------
+   */
+
+  const focus =
+    useMemo(() => {
+      const query =
+        search.trim().toUpperCase();
+
+      if (!query) {
+        return null;
+      }
+
+      const found =
+        detections.find(
+          (detection) =>
+            detection.id
+              .toUpperCase()
+              .includes(query),
+        );
+
+      if (!found) {
+        return null;
+      }
+
+      return (
+        clusters.find(
+          (cluster) =>
+            cluster.detections.some(
+              (detection) =>
+                detection.id ===
+                found.id,
+            ),
         ) ?? null
-      : null;
-  }, [
-    search,
-    detections,
-    clusters,
-  ]);
+      );
+    }, [
+      search,
+      detections,
+      clusters,
+    ]);
+
+  /*
+   * -------------------------------------------------------
+   * Cluster helpers
+   * -------------------------------------------------------
+   */
 
   const dominant = (
     cluster: Cluster,
-  ) => {
+  ): DetectionClass => {
     const counts =
       new Map<
         DetectionClass,
@@ -493,45 +806,67 @@ export function MapPage() {
       >();
 
     cluster.detections.forEach(
-      (d) => {
+      (detection) => {
         counts.set(
-          d.className,
+          detection.className,
           (counts.get(
-            d.className,
+            detection.className,
           ) ?? 0) + 1,
         );
       },
     );
 
-    return Array.from(
-      counts.entries(),
-    ).sort(
-      (a, b) => b[1] - a[1],
-    )[0][0];
+    const first =
+      Array.from(
+        counts.entries(),
+      ).sort(
+        (a, b) =>
+          b[1] - a[1],
+      )[0];
+
+    return (
+      first?.[0] ??
+      'shipwreck'
+    );
   };
 
   const worstRisk = (
     cluster: Cluster,
   ): RiskLevel => {
-    const risksForCluster =
+    const values =
       cluster.detections.map(
-        (d) => d.riskLevel,
+        (detection) =>
+          detection.riskLevel,
       );
 
-    return risksForCluster.includes(
-      'critical',
-    )
-      ? 'critical'
-      : risksForCluster.includes(
-          'high',
-        )
-        ? 'high'
-        : risksForCluster.includes(
-            'medium',
-          )
-          ? 'medium'
-          : 'low';
+    if (
+      values.includes(
+        'critical',
+      )
+    ) {
+      return 'critical';
+    }
+
+    if (
+      values.includes('high')
+    ) {
+      return 'high';
+    }
+
+    if (
+      values.includes('medium')
+    ) {
+      return 'medium';
+    }
+
+    return 'low';
   };
+
+  /*
+   * -------------------------------------------------------
+   * Map presentation
+   * -------------------------------------------------------
+   */
 
   const layerBg =
     layer === 'chart'
@@ -540,103 +875,129 @@ export function MapPage() {
         ? 'linear-gradient(180deg, #04101f, #02080f)'
         : 'radial-gradient(60% 80% at 50% 20%, #0e3352, #071a2e 60%, #050f1b)';
 
-  const west = pathFrom(
-    WEST_COAST,
-  );
-
-  const east = pathFrom(
-    EAST_COAST,
-  );
-
-  /* -------------------------------------------------------
-   * Map fit
-   * ----------------------------------------------------- */
-
-  const fitPoints = target
-    ? [
-        [
-          Math.min(
-            origin.lat,
-            target.lat,
-          ),
-          Math.min(
-            origin.lng,
-            target.lng,
-          ),
-        ],
-        [
-          Math.max(
-            origin.lat,
-            target.lat,
-          ),
-          Math.max(
-            origin.lng,
-            target.lng,
-          ),
-        ],
-      ] as [number, number][]
-    : [
-        [LAT_MIN, LON_MIN],
-        [LAT_MAX, LON_MAX],
-      ] as [number, number][];
+  const fitPoints =
+    target
+      ? ([
+          [
+            Math.min(
+              origin.lat,
+              target.lat,
+            ),
+            Math.min(
+              origin.lng,
+              target.lng,
+            ),
+          ],
+          [
+            Math.max(
+              origin.lat,
+              target.lat,
+            ),
+            Math.max(
+              origin.lng,
+              target.lng,
+            ),
+          ],
+        ] as [
+          number,
+          number,
+        ][])
+      : ([
+          [
+            LAT_MIN,
+            LON_MIN,
+          ],
+          [
+            LAT_MAX,
+            LON_MAX,
+          ],
+        ] as [
+          number,
+          number,
+        ][]);
 
   return (
     <div>
       <PageHead
-        kicker={t('map.title')}
-        title={t('nav.map')}
-        sub={t('map.sub')}
+        kicker={t(
+          'map.title',
+        )}
+        title={t(
+          'nav.map',
+        )}
+        sub={t(
+          'map.sub',
+        )}
         right={
           <div
             className="row wrap"
-            style={{ gap: 8 }}
+            style={{
+              gap: 8,
+            }}
           >
             {(
               [
                 [
                   'sonar',
-                  t('map.sonar'),
+                  t(
+                    'map.sonar',
+                  ),
                 ],
                 [
                   'chart',
-                  t('map.topographic'),
+                  t(
+                    'map.topographic',
+                  ),
                 ],
                 [
                   'satellite',
-                  t('map.satellite'),
+                  t(
+                    'map.satellite',
+                  ),
                 ],
               ] as const
-            ).map(([value, label]) => (
-              <button
-                key={value}
-                className={`chip${
-                  layer === value
-                    ? ' on'
-                    : ''
-                }`}
-                onClick={() =>
-                  setLayer(value)
-                }
-              >
-                {label}
-              </button>
-            ))}
+            ).map(
+              ([
+                value,
+                label,
+              ]) => (
+                <button
+                  key={value}
+                  className={`chip${
+                    layer ===
+                    value
+                      ? ' on'
+                      : ''
+                  }`}
+                  onClick={() =>
+                    setLayer(
+                      value,
+                    )
+                  }
+                >
+                  {label}
+                </button>
+              ),
+            )}
           </div>
         }
       />
 
       <div
         className="grid cols-12"
-        style={{ gap: 16 }}
+        style={{
+          gap: 16,
+        }}
       >
-        {/* -------------------------------------------------
+        {/* =================================================
             MAP
-        -------------------------------------------------- */}
+        ================================================== */}
 
         <div className="span-8">
           <GeoOceanMap
             style={{
-              background: layerBg,
+              background:
+                layerBg,
             }}
             fitPts={fitPoints}
             fitKey={
@@ -650,7 +1011,7 @@ export function MapPage() {
                   )}-${target.lng.toFixed(
                     3,
                   )}`
-                : 'eez'
+                : 'detection-map'
             }
             connectingLabel={t(
               'map.gisConnecting',
@@ -658,8 +1019,10 @@ export function MapPage() {
             markers={clusters.map(
               (cluster) => ({
                 id: cluster.key,
-                lat: cluster.lat,
-                lng: cluster.lng,
+                lat:
+                  cluster.lat,
+                lng:
+                  cluster.lng,
                 color:
                   CLASS_META[
                     dominant(
@@ -667,7 +1030,8 @@ export function MapPage() {
                     )
                   ].color,
                 count:
-                  cluster.detections
+                  cluster
+                    .detections
                     .length,
                 selected:
                   selected?.key ===
@@ -682,11 +1046,15 @@ export function MapPage() {
               }),
             )}
             route={
-              target
+              target &&
+              navigationRoute.length >
+                1
                 ? {
                     points:
                       navigationRoute.map(
-                        (point) => [
+                        (
+                          point,
+                        ) => [
                           point.lat,
                           point.lng,
                         ],
@@ -702,12 +1070,13 @@ export function MapPage() {
                 className="map-canvas"
                 viewBox={`0 0 ${W} ${H}`}
                 style={{
-                  height: 'auto',
+                  height:
+                    'auto',
                 }}
               >
                 <defs>
                   <radialGradient
-                    id="mg-shelf"
+                    id="map-shelf"
                     cx="0.5"
                     cy="0.5"
                     r="0.5"
@@ -724,15 +1093,19 @@ export function MapPage() {
                   </radialGradient>
                 </defs>
 
-                {/* graticule */}
+                {/* Graticule */}
+
                 {Array.from(
                   {
                     length: 9,
                   },
-                  (_, i) => {
+                  (
+                    _,
+                    index,
+                  ) => {
                     const lat =
                       LAT_MIN +
-                      i * 2;
+                      index * 2;
 
                     const y =
                       ((LAT_MAX -
@@ -744,7 +1117,7 @@ export function MapPage() {
 
                     return (
                       <g
-                        key={`gl-${lat}`}
+                        key={`lat-${lat}`}
                       >
                         <line
                           x1={20}
@@ -769,15 +1142,17 @@ export function MapPage() {
                   },
                 )}
 
-                {/* longitude */}
                 {Array.from(
                   {
                     length: 10,
                   },
-                  (_, i) => {
+                  (
+                    _,
+                    index,
+                  ) => {
                     const lng =
                       LON_MIN +
-                      i * 3;
+                      index * 3;
 
                     const x =
                       ((lng -
@@ -789,7 +1164,7 @@ export function MapPage() {
 
                     return (
                       <g
-                        key={`gl-${lng}`}
+                        key={`lng-${lng}`}
                       >
                         <line
                           x1={x}
@@ -814,176 +1189,14 @@ export function MapPage() {
                   },
                 )}
 
-                {/* isobaths */}
-                {[46, 96, 168, 260, 380].map(
-                  (value, index) => (
-                    <ellipse
-                      key={index}
-                      cx={value}
-                      cy={
-                        H -
-                        value -
-                        40
-                      }
-                      rx={
-                        value * 2.4
-                      }
-                      ry={
-                        value * 1.9
-                      }
-                      fill="none"
-                      stroke="var(--accent)"
-                      strokeOpacity={
-                        0.10 +
-                        index *
-                          0.02
-                      }
-                      strokeWidth="1"
-                      strokeDasharray="4 5"
-                    />
-                  ),
-                )}
+                {/* Detection markers */}
 
-                <ellipse
-                  cx={430}
-                  cy={420}
-                  rx={330}
-                  ry={220}
-                  fill="url(#mg-shelf)"
-                />
-
-                <ellipse
-                  cx={760}
-                  cy={340}
-                  rx={220}
-                  ry={150}
-                  fill="url(#mg-shelf)"
-                />
-
-                <ellipse
-                  cx={210}
-                  cy={560}
-                  rx={200}
-                  ry={120}
-                  fill="url(#mg-shelf)"
-                />
-
-                {/* coastlines */}
-                <path
-                  d={west}
-                  fill="none"
-                  stroke="var(--ink-2)"
-                  strokeWidth="1.6"
-                  strokeLinejoin="round"
-                />
-
-                <path
-                  d={west}
-                  fill="none"
-                  stroke="var(--teal)"
-                  strokeOpacity="0.35"
-                  strokeWidth="4"
-                  strokeLinecap="round"
-                  strokeDasharray="1 8"
-                />
-
-                <path
-                  d={east}
-                  fill="none"
-                  stroke="var(--ink-2)"
-                  strokeWidth="1.6"
-                  strokeLinejoin="round"
-                />
-
-                <path
-                  d={east}
-                  fill="none"
-                  stroke="var(--teal)"
-                  strokeOpacity="0.35"
-                  strokeWidth="4"
-                  strokeLinecap="round"
-                  strokeDasharray="1 8"
-                />
-
-                {ANDAMAN.map(
-                  ([lng, lat], i) => {
-                    const {
-                      x,
-                      y,
-                    } = project(
-                      lat,
-                      lng,
-                    );
-
-                    return (
-                      <circle
-                        key={i}
-                        cx={x}
-                        cy={y}
-                        r={2.4}
-                        fill="var(--ink-2)"
-                      />
-                    );
-                  },
-                )}
-
-                {/* site labels */}
-                {SITES.slice(
-                  0,
-                  6,
-                ).map((site) => {
-                  const mark =
-                    project(
-                      site.lat +
-                        2,
-                      site.lng,
-                    );
-
-                  return (
-                    <text
-                      key={
-                        site.name
-                      }
-                      x={mark.x}
-                      y={mark.y}
-                      fontSize="9.5"
-                      fill="var(--ink-3)"
-                      fontFamily="var(--font-mono)"
-                    >
-                      {site.name.split(
-                        '—',
-                      )[1]
-                        ?.trim() ??
-                        site.name.split(
-                          '–',
-                        )[1]
-                          ?.trim() ??
-                        site.name}
-                    </text>
-                  );
-                })}
-
-                {/* detection markers */}
                 {clusters.map(
                   (cluster) => {
-                    const {
-                      x,
-                      y,
-                    } = project(
-                      cluster.lat,
-                      cluster.lng,
-                    );
-
-                    const size =
-                      Math.min(
-                        26,
-                        8 +
-                          Math.sqrt(
-                            cluster
-                              .detections
-                              .length,
-                          ) *
-                            4.5,
+                    const p =
+                      project(
+                        cluster.lat,
+                        cluster.lng,
                       );
 
                     const color =
@@ -993,148 +1206,123 @@ export function MapPage() {
                         )
                       ].color;
 
-                    const isFocus =
-                      focus?.key ===
-                      cluster.key;
-
-                    const highlighted =
-                      selected?.key ===
-                      cluster.key;
-
                     return (
                       <g
                         key={
                           cluster.key
                         }
-                        transform={`translate(${x},${y})`}
-                        onClick={() =>
-                          setSelected(
-                            cluster,
-                          )
-                        }
-                        style={{
-                          cursor:
-                            'pointer',
-                        }}
+                        transform={`translate(${p.x},${p.y})`}
                       >
                         <circle
                           r={
-                            size +
-                            (isFocus
-                              ? 8
-                              : 0)
-                          }
-                          fill="none"
-                          stroke={color}
-                          strokeOpacity={
-                            isFocus ||
-                            highlighted
-                              ? 1
-                              : 0.55
-                          }
-                          strokeWidth={
-                            isFocus ||
-                            highlighted
-                              ? 2
-                              : 1
-                          }
-                          strokeDasharray="3 3"
-                        >
-                          {highlighted && (
-                            <animate
-                              attributeName="r"
-                              values={`${size};${
-                                size +
-                                9
-                              };${size}`}
-                              dur="1.4s"
-                              repeatCount="indefinite"
-                            />
-                          )}
-                        </circle>
-
-                        <circle
-                          r={size}
-                          fill={color}
-                          fillOpacity="0.16"
-                          stroke="none"
-                        />
-
-                        <circle
-                          r={Math.min(
-                            9,
-                            size *
-                              0.42,
-                          )}
-                          fill={color}
-                        />
-
-                        <text
-                          y={
-                            -size -
-                            6
-                          }
-                          textAnchor="middle"
-                          fontSize="10.5"
-                          fill="var(--ink-2)"
-                          fontFamily="var(--font-mono)"
-                        >
-                          {
                             cluster
                               .detections
-                              .length
-                          }×
-                        </text>
+                              .length >
+                            1
+                              ? 10
+                              : 7
+                          }
+                          fill={
+                            color
+                          }
+                          fillOpacity={
+                            0.35
+                          }
+                          stroke={
+                            color
+                          }
+                          strokeWidth={
+                            2
+                          }
+                        />
+
+                        <circle
+                          r={3}
+                          fill={
+                            color
+                          }
+                        />
+
+                        {cluster
+                          .detections
+                          .length >
+                          1 && (
+                          <text
+                            x={13}
+                            y={4}
+                            fontSize="10"
+                            fill="var(--ink)"
+                            fontFamily="var(--font-mono)"
+                          >
+                            {
+                              cluster
+                                .detections
+                                .length
+                            }
+                          </text>
+                        )}
                       </g>
                     );
                   },
                 )}
 
-                {/* navigation origin */}
-                {target && (
+                {/* Search focus */}
+
+                {focus && (
                   <g
                     transform={`translate(${
                       project(
-                        origin.lat,
-                        origin.lng,
+                        focus.lat,
+                        focus.lng,
                       ).x
                     },${
                       project(
-                        origin.lat,
-                        origin.lng,
+                        focus.lat,
+                        focus.lng,
                       ).y
                     })`}
                   >
                     <circle
-                      r={16}
+                      r={18}
                       fill="none"
-                      stroke="var(--teal)"
-                      strokeOpacity="0.7"
-                      strokeWidth="1"
-                      strokeDasharray="3 3"
+                      stroke="var(--accent)"
+                      strokeWidth="2"
+                      strokeDasharray="4 4"
                     />
-
-                    <circle
-                      r={7}
-                      fill="var(--teal)"
-                      fillOpacity="0.25"
-                      stroke="var(--teal)"
-                      strokeWidth="1.6"
-                    />
-
-                    <text
-                      y={-20}
-                      textAnchor="middle"
-                      fontSize="10"
-                      fill="var(--teal)"
-                      fontFamily="var(--font-mono)"
-                    >
-                      {t('ngx.you')}
-                    </text>
                   </g>
                 )}
 
-                {/* navigation target */}
+                {/* Vessel origin */}
+
+                <g
+                  transform={`translate(${
+                    project(
+                      origin.lat,
+                      origin.lng,
+                    ).x
+                  },${
+                    project(
+                      origin.lat,
+                      origin.lng,
+                    ).y
+                  })`}
+                >
+                  <circle
+                    r={7}
+                    fill="var(--accent)"
+                    fillOpacity="0.35"
+                    stroke="var(--accent)"
+                    strokeWidth="2"
+                  />
+
+                  <circle
+                    r={2.5}
+                    fill="var(--accent)"
+                  />
+                </g>
+
+                {/* Target */}
+
                 {target && (
                   <g
                     transform={`translate(${
@@ -1183,7 +1371,8 @@ export function MapPage() {
                   </g>
                 )}
 
-                {/* navigation route */}
+                {/* Navigation route */}
+
                 {navigationRoute.length >
                   1 && (
                   <path
@@ -1233,7 +1422,9 @@ export function MapPage() {
                       'var(--critical)',
                   }}
                 />
-                {t('risk.critical')}
+                {t(
+                  'risk.critical',
+                )}
               </span>
 
               <span className="ml">
@@ -1244,7 +1435,9 @@ export function MapPage() {
                       'var(--high)',
                   }}
                 />
-                {t('risk.high')}
+                {t(
+                  'risk.high',
+                )}
               </span>
 
               <span className="ml">
@@ -1255,7 +1448,9 @@ export function MapPage() {
                       'var(--medium)',
                   }}
                 />
-                {t('risk.medium')}
+                {t(
+                  'risk.medium',
+                )}
               </span>
 
               <span className="ml">
@@ -1283,6 +1478,7 @@ export function MapPage() {
                         'inline-block',
                     }}
                   />
+
                   {t(
                     'ngx.legendRoute',
                   )}
@@ -1310,7 +1506,10 @@ export function MapPage() {
                   'var(--ink-3)',
               }}
             >
-              {t('map.basemap')} ·{' '}
+              {t(
+                'map.basemap',
+              )}{' '}
+              ·{' '}
               {t(
                 layer ===
                   'sonar'
@@ -1324,15 +1523,18 @@ export function MapPage() {
           </GeoOceanMap>
         </div>
 
-        {/* -------------------------------------------------
+        {/* =================================================
             RIGHT SIDE
-        -------------------------------------------------- */}
+        ================================================== */}
 
         <div
           className="span-4 stack"
-          style={{ gap: 16 }}
+          style={{
+            gap: 16,
+          }}
         >
-          {/* Navigation */}
+          {/* Navigation target */}
+
           <Card>
             <CardHead
               kt={t(
@@ -1345,7 +1547,9 @@ export function MapPage() {
 
             <div
               className="stack"
-              style={{ gap: 12 }}
+              style={{
+                gap: 12,
+              }}
             >
               <Field
                 label={t(
@@ -1367,22 +1571,26 @@ export function MapPage() {
                       ),
                     },
                     ...detections.map(
-                      (d) => ({
-                        value: d.id,
+                      (
+                        detection,
+                      ) => ({
+                        value:
+                          detection.id,
                         label: t(
                           'ngx.detOption',
                           {
-                            id: d.id,
+                            id:
+                              detection.id,
                             cls: clsLabel(
-                              d.className,
+                              detection.className,
                               language,
                             ),
                             coords:
                               fmtCoordinate(
-                                d
+                                detection
                                   .gps
                                   .latitude,
-                                d
+                                detection
                                   .gps
                                   .longitude,
                               ),
@@ -1396,7 +1604,9 @@ export function MapPage() {
 
               <div
                 className="row"
-                style={{ gap: 10 }}
+                style={{
+                  gap: 10,
+                }}
               >
                 <Field
                   label={t(
@@ -1405,10 +1615,15 @@ export function MapPage() {
                 >
                   <input
                     className="input"
-                    value={latInput}
-                    onChange={(event) =>
+                    value={
+                      latInput
+                    }
+                    onChange={(
+                      event,
+                    ) =>
                       setLatInput(
-                        event.target
+                        event
+                          .target
                           .value,
                       )
                     }
@@ -1425,10 +1640,15 @@ export function MapPage() {
                 >
                   <input
                     className="input"
-                    value={lngInput}
-                    onChange={(event) =>
+                    value={
+                      lngInput
+                    }
+                    onChange={(
+                      event,
+                    ) =>
                       setLngInput(
-                        event.target
+                        event
+                          .target
                           .value,
                       )
                     }
@@ -1439,20 +1659,40 @@ export function MapPage() {
                 </Field>
               </div>
 
-              <Button
-                variant="secondary"
-                block
-                onClick={
-                  submitManualTarget
-                }
+              <div
+                className="row"
+                style={{
+                  gap: 8,
+                }}
               >
-                <IconTarget
-                  size={15}
-                />
-                {t(
-                  'ngx.lockTarget',
+                <Button
+                  variant="secondary"
+                  block
+                  onClick={
+                    submitManualTarget
+                  }
+                >
+                  <IconTarget
+                    size={15}
+                  />
+                  {t(
+                    'ngx.lockTarget',
+                  )}
+                </Button>
+
+                {target && (
+                  <Button
+                    variant="ghost"
+                    onClick={
+                      clearNavigationTarget
+                    }
+                  >
+                    {t(
+                      'common.clear',
+                    )}
+                  </Button>
                 )}
-              </Button>
+              </div>
 
               <div
                 className="tiny muted"
@@ -1463,10 +1703,14 @@ export function MapPage() {
                 {t(
                   'ngx.rangeNote',
                   {
-                    latMin: LAT_MIN,
-                    latMax: LAT_MAX,
-                    lonMin: LON_MIN,
-                    lonMax: LON_MAX,
+                    latMin:
+                      LAT_MIN,
+                    latMax:
+                      LAT_MAX,
+                    lonMin:
+                      LON_MIN,
+                    lonMax:
+                      LON_MAX,
                   },
                 )}
               </div>
@@ -1496,6 +1740,7 @@ export function MapPage() {
           </Card>
 
           {/* GPS */}
+
           <Card>
             <CardHead
               kt={t(
@@ -1515,10 +1760,12 @@ export function MapPage() {
               <span
                 className="badge"
                 style={{
-                  background: `color-mix(in srgb, ${locationTone} 16%, transparent)`,
+                  background:
+                    `color-mix(in srgb, ${locationTone} 16%, transparent)`,
                   color:
                     locationTone,
-                  border: `1px solid ${locationTone}`,
+                  border:
+                    `1px solid ${locationTone}`,
                 }}
               >
                 {locationLabel}
@@ -1560,6 +1807,7 @@ export function MapPage() {
               }
             >
               <IconPin size={15} />
+
               {gpsEnabled
                 ? t(
                     'ngx.disableGps',
@@ -1576,14 +1824,21 @@ export function MapPage() {
               }}
             >
               {myPosition
-                ? `AUTO · ${origin.lat.toFixed(4)}, ${origin.lng.toFixed(4)}`
-                : t(
-                    'ngx.originNote',
-                  )}
+                ? `AUTO · ${origin.lat.toFixed(
+                    4,
+                  )}, ${origin.lng.toFixed(
+                    4,
+                  )}`
+                : usingSimulationOrigin
+                  ? t(
+                      'ngx.originNote',
+                    )
+                  : ''}
             </div>
           </Card>
 
           {/* Route metrics */}
+
           <Card>
             <CardHead
               kt={t(
@@ -1596,7 +1851,9 @@ export function MapPage() {
 
             <div
               className="stack"
-              style={{ gap: 10 }}
+              style={{
+                gap: 10,
+              }}
             >
               <Field
                 label={t(
@@ -1607,9 +1864,13 @@ export function MapPage() {
                   value={String(
                     vesselSpeed,
                   )}
-                  onChange={(value) =>
+                  onChange={(
+                    value,
+                  ) =>
                     setVesselSpeed(
-                      Number(value),
+                      Number(
+                        value,
+                      ),
                     )
                   }
                   options={[
@@ -1617,28 +1878,36 @@ export function MapPage() {
                       value: '6',
                       label: t(
                         'ngx.speedTrawl',
-                        { kn: 6 },
+                        {
+                          kn: 6,
+                        },
                       ),
                     },
                     {
                       value: '12',
                       label: t(
                         'ngx.speedSurvey',
-                        { kn: 12 },
+                        {
+                          kn: 12,
+                        },
                       ),
                     },
                     {
                       value: '18',
                       label: t(
                         'ngx.speedResponse',
-                        { kn: 18 },
+                        {
+                          kn: 18,
+                        },
                       ),
                     },
                     {
                       value: '24',
                       label: t(
                         'ngx.speedMax',
-                        { kn: 24 },
+                        {
+                          kn: 24,
+                        },
                       ),
                     },
                   ]}
@@ -1725,7 +1994,8 @@ export function MapPage() {
             </div>
           </Card>
 
-          {/* Existing map filters */}
+          {/* Detection filters */}
+
           <Card>
             <CardHead
               kt={t(
@@ -1755,7 +2025,9 @@ export function MapPage() {
 
             <div
               className="stack"
-              style={{ gap: 12 }}
+              style={{
+                gap: 12,
+              }}
             >
               <div>
                 <span
@@ -1773,35 +2045,56 @@ export function MapPage() {
 
                 <ChipGroup
                   options={CLASS_LIST.map(
-                    (className) =>
+                    (
+                      className,
+                    ) =>
                       clsLabel(
                         className,
                         language,
                       ),
                   )}
                   value={classes.map(
-                    (className) =>
+                    (
+                      className,
+                    ) =>
                       clsLabel(
-                        className as DetectionClass,
+                        className,
                         language,
                       ),
                   )}
-                  onChange={(values) =>
-                    setClasses(
-                      values.map(
-                        (label) =>
-                          CLASS_LIST.find(
-                            (className) =>
-                              clsLabel(
+                  onChange={(
+                    values,
+                  ) => {
+                    const next =
+                      values
+                        .map(
+                          (
+                            label,
+                          ) =>
+                            CLASS_LIST.find(
+                              (
                                 className,
-                                language,
-                              ) ===
-                              label,
-                          ) ??
-                          'shipwreck',
-                      ),
-                    )
-                  }
+                              ) =>
+                                clsLabel(
+                                  className,
+                                  language,
+                                ) ===
+                                label,
+                            ),
+                        )
+                        .filter(
+                          (
+                            value,
+                          ): value is DetectionClass =>
+                            Boolean(
+                              value,
+                            ),
+                        );
+
+                    setClasses(
+                      next,
+                    );
+                  }}
                 />
               </div>
 
@@ -1880,9 +2173,11 @@ export function MapPage() {
                 </span>
 
                 <Select
-                  value={window}
+                  value={
+                    timeWindow
+                  }
                   onChange={
-                    setWindow
+                    setTimeWindow
                   }
                   options={[
                     {
@@ -1895,21 +2190,27 @@ export function MapPage() {
                       value: '24h',
                       label: t(
                         'map.windowHours',
-                        { n: 24 },
+                        {
+                          n: 24,
+                        },
                       ),
                     },
                     {
                       value: '7d',
                       label: t(
                         'map.windowDays',
-                        { n: 7 },
+                        {
+                          n: 7,
+                        },
                       ),
                     },
                     {
                       value: '30d',
                       label: t(
                         'map.windowDays',
-                        { n: 30 },
+                        {
+                          n: 30,
+                        },
                       ),
                     },
                   ]}
@@ -1919,6 +2220,7 @@ export function MapPage() {
           </Card>
 
           {/* Detection results */}
+
           <Card>
             <CardHead
               kt={t(
@@ -1940,110 +2242,116 @@ export function MapPage() {
               style={{
                 gap: 2,
                 maxHeight: 330,
-                overflow: 'auto',
+                overflow:
+                  'auto',
               }}
             >
               {clusters
                 .slice(0, 10)
-                .map((cluster) => {
-                  const detection =
-                    cluster
-                      .detections[0];
+                .map(
+                  (
+                    cluster,
+                  ) => {
+                    const detection =
+                      cluster
+                        .detections[0];
 
-                  return (
-                    <button
-                      key={
-                        cluster.key
-                      }
-                      className="monitor-row"
-                      style={{
-                        textAlign:
-                          'left',
-                        borderBottom:
-                          '1px solid var(--line-faint)',
-                        padding:
-                          '9px 4px',
-                        background:
-                          'transparent',
-                        width:
-                          '100%',
-                        border:
-                          'none',
-                        cursor:
-                          'pointer',
-                      }}
-                      onClick={() =>
-                        setSelected(
-                          cluster,
-                        )
-                      }
-                    >
-                      <div
-                        className="row-between"
+                    return (
+                      <button
+                        key={
+                          cluster.key
+                        }
+                        className="monitor-row"
                         style={{
-                          gap: 8,
+                          textAlign:
+                            'left',
+                          borderBottom:
+                            '1px solid var(--line-faint)',
+                          padding:
+                            '9px 4px',
+                          background:
+                            'transparent',
+                          width:
+                            '100%',
+                          border:
+                            'none',
+                          cursor:
+                            'pointer',
                         }}
+                        onClick={() =>
+                          setSelected(
+                            cluster,
+                          )
+                        }
                       >
-                        <b
-                          className="mono"
+                        <div
+                          className="row-between"
                           style={{
-                            fontSize:
-                              11.5,
+                            gap: 8,
                           }}
                         >
-                          {fmtCoordinate(
-                            cluster.lat,
-                            cluster.lng,
+                          <b
+                            className="mono"
+                            style={{
+                              fontSize:
+                                11.5,
+                            }}
+                          >
+                            {fmtCoordinate(
+                              cluster.lat,
+                              cluster.lng,
+                            )}
+                          </b>
+
+                          <span className="badge b-plain">
+                            {
+                              cluster
+                                .detections
+                                .length
+                            }
+                            ×
+                          </span>
+                        </div>
+
+                        <div
+                          className="row"
+                          style={{
+                            gap: 6,
+                            marginTop: 4,
+                          }}
+                        >
+                          <ClassBadge
+                            cls={dominant(
+                              cluster,
+                            )}
+                          />
+
+                          <RiskBadge
+                            risk={worstRisk(
+                              cluster,
+                            )}
+                          />
+                        </div>
+
+                        <div
+                          className="mono tiny muted"
+                          style={{
+                            marginTop: 3,
+                          }}
+                        >
+                          {fmtDT(
+                            detection.detectionTime,
+                          )}{' '}
+                          ·{' '}
+                          {detection.department.replace(
+                            /-/g,
+                            ' ',
                           )}
-                        </b>
-
-                        <span className="badge b-plain">
-                          {
-                            cluster
-                              .detections
-                              .length
-                          }×
-                        </span>
-                      </div>
-
-                      <div
-                        className="row"
-                        style={{
-                          gap: 6,
-                          marginTop: 4,
-                        }}
-                      >
-                        <ClassBadge
-                          cls={dominant(
-                            cluster,
-                          )}
-                        />
-
-                        <RiskBadge
-                          risk={worstRisk(
-                            cluster,
-                          )}
-                        />
-                      </div>
-
-                      <div
-                        className="mono tiny muted"
-                        style={{
-                          marginTop: 3,
-                        }}
-                      >
-                        {fmtDT(
-                          detection.detectionTime,
-                        )}{' '}
-                        ·{' '}
-                        {detection.department.replace(
-                          /-/g,
-                          ' ',
-                        )}
-                      </div>
-                    </button>
-                  );
-                })}
+                        </div>
+                      </button>
+                    );
+                  },
+                )}
 
               {clusters.length ===
                 0 && (
@@ -2066,9 +2374,9 @@ export function MapPage() {
         </div>
       </div>
 
-      {/* ---------------------------------------------------
-          Selected detection drawer
-      ---------------------------------------------------- */}
+      {/* =================================================
+          SELECTED DETECTION DRAWER
+      ================================================== */}
 
       {selected && (
         <Drawer
@@ -2095,6 +2403,7 @@ export function MapPage() {
                     <IconScan
                       size={15}
                     />
+
                     {t(
                       'map.viewCase',
                     )}
@@ -2109,12 +2418,14 @@ export function MapPage() {
 
                       applyNavigationTarget(
                         {
-                          lat: detection
-                            .gps
-                            .latitude,
-                          lng: detection
-                            .gps
-                            .longitude,
+                          lat:
+                            detection
+                              .gps
+                              .latitude,
+                          lng:
+                            detection
+                              .gps
+                              .longitude,
                           label:
                             clsLabel(
                               detection.className,
@@ -2135,6 +2446,7 @@ export function MapPage() {
                     <IconTarget
                       size={15}
                     />
+
                     {t(
                       'ngx.lockTarget',
                     )}
@@ -2145,7 +2457,9 @@ export function MapPage() {
               <Button
                 variant="secondary"
                 onClick={() =>
-                  setSelected(null)
+                  setSelected(
+                    null,
+                  )
                 }
               >
                 {t(
@@ -2220,10 +2534,8 @@ export function MapPage() {
                     padding: 10,
                     border:
                       '1px solid var(--line-faint)',
-                    borderRadius:
-                      10,
-                    fontSize:
-                      12.5,
+                    borderRadius: 10,
+                    fontSize: 12.5,
                   }}
                 >
                   <span
