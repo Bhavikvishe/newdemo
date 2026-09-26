@@ -30,3 +30,5 @@ venv/
 *.njsproj
 *.sln
 *.sw?
+# Local development artifacts
+dev.pid
