@@ -9,7 +9,6 @@ import {
   IconGear,
   IconHelm,
   IconMap,
-  IconPin,
   IconScan,
   IconShield,
   IconUpload,
@@ -65,14 +64,19 @@ export function buildNav(_user: SessionUser): NavSection[] {
   ];
 
   if (_user.department === 'system-admin') {
-    responseItems.splice(1, 0, { id: 'admin', labelKey: 'nav.admin', href: 'admin', icon: IconShield });
+    responseItems.splice(1, 0, {
+      id: 'admin',
+      labelKey: 'nav.admin',
+      href: 'admin',
+      icon: IconShield,
+    });
   }
 
   const sections: NavSection[] = [
     {
       id: 'intel',
       labelKey: 'nav.intelligence',
-      items: [...common.slice(0, 5), { id: 'navigate', labelKey: 'nav.navigate', href: 'navigate', icon: IconPin }],
+      items: common.slice(0, 5),
     },
     {
       id: 'ops',

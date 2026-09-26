@@ -9,7 +9,6 @@ import { DetectionPage } from './pages/Detection';
 import { BatchPage } from './pages/Batch';
 import { DepthAnalysisPage } from './pages/DepthAnalysis';
 import { MapPage } from './pages/Map';
-import { NavigatePage } from './pages/Navigate';
 import { AlertsPage } from './pages/Alerts';
 import { HistoryPage } from './pages/History';
 import { AnalyticsPage } from './pages/Analytics';
@@ -29,7 +28,6 @@ function Page({ page }: { page: string }) {
     case 'batch': return <BatchPage />;
     case 'depth': return <DepthAnalysisPage />;
     case 'map': return <MapPage />;
-    case 'navigate': return <NavigatePage />;
     case 'alerts': return <AlertsPage />;
     case 'history': return <HistoryPage />;
     case 'analytics': return <AnalyticsPage />;
