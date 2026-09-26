@@ -1,4 +1,4 @@
-import type { DetectionClass } from '../types';
+import type { DetectionClass, GPSPosition } from '../types';
 import type { ModelPrediction } from '../lib/detect';
 
 export type BatchStatus = 'queued' | 'processing' | 'completed' | 'failed' | 'cancelled';
@@ -10,6 +10,7 @@ export interface BatchItem {
   file?: File;
   previewUrl?: string;
   detectionId?: string;
+  gps?: GPSPosition;
   className?: DetectionClass;
   rawLabel?: string;
   status: BatchStatus;

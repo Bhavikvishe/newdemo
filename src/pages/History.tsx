@@ -15,6 +15,7 @@ import {
   downloadReportPDF,
 } from '../lib/mock';
 import type { DetectionReportSource } from '../lib/mock';
+import { fetchGebcoDepth } from '../lib/gebco';
 import { clsLabel, riskLabel } from '../lib/labels';
 import { renderFrame } from '../lib/sonar';
 import { getCachedImage } from '../lib/detect';
@@ -62,6 +63,43 @@ const OPEN_ALERT_STATUSES = [
   'escalated',
 ];
 
+async function mapConcurrent<T, R>(
+  items: T[],
+  limit: number,
+  mapper: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+
+  const worker = async () => {
+    while (true) {
+      const index = nextIndex;
+      nextIndex += 1;
+
+      if (index >= items.length) return;
+
+      results[index] = await mapper(
+        items[index],
+        index,
+      );
+    }
+  };
+
+  const workerCount = Math.min(
+    Math.max(1, limit),
+    Math.max(1, items.length),
+  );
+
+  await Promise.all(
+    Array.from(
+      { length: workerCount },
+      () => worker(),
+    ),
+  );
+
+  return results;
+}
+
 interface Report {
   id: string;
   title: string;
@@ -72,6 +110,12 @@ interface Report {
   stats: [string, string][];
   rows: Record<string, string>[];
   head: string[];
+  bathymetryRows: Record<string, string>[];
+  bathymetryExportRows: Record<string, string>[];
+  bathymetryHead: string[];
+  bathymetryStats: [string, string][];
+  oceanographyRows: Record<string, string>[];
+  oceanographyHead: string[];
 }
 
 export function HistoryPage() {
@@ -99,6 +143,7 @@ export function HistoryPage() {
     useState<DepartmentId | 'all'>('all');
   const [reports, setReports] = useState<Report[]>([]);
   const [openReport, setOpenReport] = useState<Report | null>(null);
+  const [generatingReport, setGeneratingReport] = useState(false);
 
   // ---------------------------------------------------------------------------
   // History helpers
@@ -235,227 +280,572 @@ export function HistoryPage() {
     deptFilter,
   ]);
 
-  const generateReport = () => {
-    const byClass = Object.fromEntries(
-      CLASS_LIST.map((c) => [c, 0]),
-    ) as Record<string, number>;
+  const generateReport = async () => {
+    if (generatingReport) return;
 
-    const byRisk = {
-      critical: 0,
-      high: 0,
-      medium: 0,
-      low: 0,
-    } as Record<string, number>;
+    setGeneratingReport(true);
 
-    reportDetections.forEach((d) => {
-      byClass[d.className] += 1;
-      byRisk[d.riskLevel] += 1;
-    });
+    try {
+      const byClass = Object.fromEntries(
+        CLASS_LIST.map((c) => [c, 0]),
+      ) as Record<string, number>;
 
-    const openAlerts = alerts.filter(
-      (a) =>
-        OPEN_ALERT_STATUSES.includes(
-          a.status,
-        ) &&
-        (deptFilter === 'all' ||
-          a.detection.department ===
-            deptFilter),
-    );
+      const byRisk = {
+        critical: 0,
+        high: 0,
+        medium: 0,
+        low: 0,
+      } as Record<string, number>;
 
-    const resolved = alerts.filter(
-      (a) =>
-        a.status === 'resolved' &&
-        (deptFilter === 'all' ||
-          a.detection.department ===
-            deptFilter),
-    );
+      reportDetections.forEach((d) => {
+        byClass[d.className] += 1;
+        byRisk[d.riskLevel] += 1;
+      });
 
-    const windowLabel =
-      reportWindow === 'last24'
-        ? t('rpt.win24')
-        : reportWindow === 'last7'
-          ? t('rpt.win7')
-          : reportWindow === 'last30'
-            ? t('rpt.win30')
-            : t('rpt.win90');
+      const openAlerts = alerts.filter(
+        (a) =>
+          OPEN_ALERT_STATUSES.includes(a.status) &&
+          (deptFilter === 'all' ||
+            a.detection.department === deptFilter),
+      );
 
-    const deptLabel =
-      deptFilter === 'all'
-        ? t('rpt.allDepts')
-        : deptById(deptFilter).name;
+      const resolved = alerts.filter(
+        (a) =>
+          a.status === 'resolved' &&
+          (deptFilter === 'all' ||
+            a.detection.department === deptFilter),
+      );
 
-    const heads = [
-      t('rpt.col.objectClass'),
-      t('rpt.col.count'),
-      t('common.risk'),
-      t('rpt.col.avgConf'),
-      t('rpt.col.topRegion'),
-    ];
+      const windowLabel =
+        reportWindow === 'last24'
+          ? t('rpt.win24')
+          : reportWindow === 'last7'
+            ? t('rpt.win7')
+            : reportWindow === 'last30'
+              ? t('rpt.win30')
+              : t('rpt.win90');
 
-    const maxHits = Math.max(
-      ...Object.values(byClass),
-      0,
-    );
+      const deptLabel =
+        deptFilter === 'all'
+          ? t('rpt.allDepts')
+          : deptById(deptFilter).name;
 
-    const topClass = CLASS_LIST.find(
-      (c) => byClass[c] === maxHits,
-    );
+      const heads = [
+        t('rpt.col.objectClass'),
+        t('rpt.col.count'),
+        t('common.risk'),
+        t('rpt.col.avgConf'),
+        t('rpt.col.topRegion'),
+      ];
 
-    const report: Report = {
-      id: `RP-${new Date()
-        .getTime()
-        .toString(36)
-        .toUpperCase()}`,
+      const maxHits = Math.max(
+        ...Object.values(byClass),
+        0,
+      );
 
-      title: t('rpt.cohortTitle'),
+      const topClass = CLASS_LIST.find(
+        (c) => byClass[c] === maxHits,
+      );
 
-      window: windowLabel,
+      /*
+       * Depth Analysis is a report-time enrichment. Detection records keep
+       * their original GPS coordinates; the report asks the GEBCO service
+       * for bathymetry at those coordinates and stores the complete returned
+       * provenance so live data is never confused with the synthetic fallback.
+       */
+      const bathymetryResponses =
+        await mapConcurrent(
+          reportDetections,
+          4,
+          async (d) => {
+            try {
+              return await fetchGebcoDepth(
+                d.gps.latitude,
+                d.gps.longitude,
+                {
+                  spanKm: 1.2,
+                  samples: 11,
+                },
+              );
+            } catch {
+              return null;
+            }
+          },
+        );
 
-      dept: deptLabel,
+      const depthRecords = reportDetections.map(
+        (d, index) => {
+          const result = bathymetryResponses[index];
+          const b = result?.bathymetry;
+          const o = result?.oceanography;
+          const p = result?.provenance;
 
-      createdAt:
-        new Date().toISOString(),
-
-      stats: [
-        [
-          t('rpt.statGenerated'),
-          fmtDT(
-            new Date().toISOString(),
-          ),
-        ],
-        [
-          t('rpt.statWindow'),
-          windowLabel,
-        ],
-        [
-          t('common.department'),
-          deptLabel,
-        ],
-        [
-          t('rpt.statDetections'),
-          String(
-            reportDetections.length,
-          ),
-        ],
-        [
-          t('rpt.statOpenAlerts'),
-          String(openAlerts.length),
-        ],
-        [
-          t('st.resolved'),
-          String(resolved.length),
-        ],
-        [
-          t('rpt.statCritical'),
-          String(byRisk.critical),
-        ],
-        [
-          t('rpt.statHigh'),
-          String(byRisk.high),
-        ],
-      ],
-
-      head: heads,
-
-      rows: CLASS_LIST.map((c) => {
-        const classDetections =
-          reportDetections.filter(
-            (d) =>
-              d.className === c,
-          );
-
-        const avg =
-          classDetections.length
-            ? (
-                (classDetections.reduce(
-                  (sum, d) =>
-                    sum + d.confidence,
-                  0,
-                ) /
-                  classDetections.length) *
-                100
-              ).toFixed(1)
-            : '—';
-
-        return {
-          [heads[0]]:
-            clsLabel(c, language),
-
-          [heads[1]]:
-            String(
-              classDetections.length,
-            ),
-
-          [heads[2]]:
-            riskLabel(
-              CLASS_META[c].riskBase,
+          return {
+            detection_id: d.id,
+            object_class: d.className,
+            object_label: clsLabel(
+              d.className,
               language,
             ),
+            risk: d.riskLevel,
+            confidence: `${(
+              d.confidence * 100
+            ).toFixed(1)}%`,
+            latitude: d.gps.latitude.toFixed(5),
+            longitude: d.gps.longitude.toFixed(5),
+            depth_m:
+              b?.depth_m !== undefined
+                ? b.depth_m.toFixed(1)
+                : '—',
+            depth_ft:
+              b?.depth_ft !== undefined
+                ? b.depth_ft.toFixed(1)
+                : '—',
+            elevation_m:
+              b?.elevation_m !== undefined
+                ? b.elevation_m.toFixed(1)
+                : '—',
+            average_transect_depth_m:
+              b?.average_transect_depth_m !==
+              undefined
+                ? b.average_transect_depth_m.toFixed(1)
+                : '—',
+            min_depth_m:
+              b?.min_depth_m !== undefined
+                ? b.min_depth_m.toFixed(1)
+                : '—',
+            max_depth_m:
+              b?.max_depth_m !== undefined
+                ? b.max_depth_m.toFixed(1)
+                : '—',
+            seabed_gradient_deg:
+              b?.seabed_gradient_deg !==
+              undefined
+                ? b.seabed_gradient_deg.toFixed(1)
+                : '—',
+            ocean_zone: o?.zone ?? '—',
+            zone_description:
+              o?.zone_description ?? '—',
+            estimated_water_temp_c:
+              o?.estimated_water_temp_c !==
+              undefined
+                ? o.estimated_water_temp_c.toFixed(1)
+                : '—',
+            sound_speed_mps:
+              o?.sound_speed_mps !==
+              undefined
+                ? o.sound_speed_mps.toFixed(1)
+                : '—',
+            sound_speed_fps:
+              o?.sound_speed_fps !==
+              undefined
+                ? o.sound_speed_fps.toFixed(1)
+                : '—',
+            hydrostatic_pressure_bar:
+              o?.hydrostatic_pressure_bar !==
+              undefined
+                ? o.hydrostatic_pressure_bar.toFixed(2)
+                : '—',
+            hydrostatic_pressure_psi:
+              o?.hydrostatic_pressure_psi !==
+              undefined
+                ? o.hydrostatic_pressure_psi.toFixed(1)
+                : '—',
+            light_penetration_pct:
+              o?.light_penetration_pct !==
+              undefined
+                ? o.light_penetration_pct.toFixed(1)
+                : '—',
+            diver_classification:
+              o?.diver_classification ?? '—',
+            dataset: result?.dataset ?? '—',
+            source:
+              p?.source_name ??
+              result?.source ??
+              'Unavailable',
+            source_type: p?.source_type ?? 'unavailable',
+            is_live:
+              p?.is_live === true
+                ? 'true'
+                : 'false',
+            is_synthetic:
+              p?.is_synthetic === true
+                ? 'true'
+                : 'false',
+            provenance_warning:
+              p?.warning ?? '',
+            queried_at:
+              result?.queried_at ?? '',
+          };
+        },
+      );
 
-          [heads[3]]:
-            `${avg}%`,
+      const validDepthRecords = depthRecords.filter(
+        (record) => record.depth_m !== '—',
+      );
 
-          [heads[4]]:
-            deptById(
-              classDetections[0]
-                ?.department ??
-                'marine-operations',
-            ).shortName,
-        };
-      }).filter(
-        (row) =>
-          row[heads[1]] !== '0',
-      ),
+      const liveCount = depthRecords.filter(
+        (record) => record.is_live === 'true',
+      ).length;
 
-      body: [
-        t('rpt.bodyIntro'),
+      const syntheticCount = depthRecords.filter(
+        (record) => record.is_synthetic === 'true',
+      ).length;
 
-        t('rpt.bodyObjectDist', {
-          n: reportDetections.length,
-          c: Object.values(
-            byClass,
-          ).filter(Boolean).length,
-        }),
+      const depthValues = validDepthRecords.map(
+        (record) => Number(record.depth_m),
+      );
+      const gradientValues = validDepthRecords.map(
+        (record) =>
+          Number(record.seabed_gradient_deg),
+      );
 
-        t('rpt.bodyRiskPosture', {
-          crit: byRisk.critical,
-          high: byRisk.high,
-          med: byRisk.medium,
-          low: byRisk.low,
-        }),
+      const averageDepth = depthValues.length
+        ? depthValues.reduce(
+            (sum, value) => sum + value,
+            0,
+          ) / depthValues.length
+        : null;
 
-        t('rpt.bodyResponseState', {
-          open: openAlerts.length,
-          resolved: resolved.length,
-        }),
+      const minDepth = depthValues.length
+        ? Math.min(...depthValues)
+        : null;
 
-        t('rpt.bodyClassFindings', {
-          cls: topClass
-            ? clsLabel(
-                topClass,
-                language,
-              )
+      const maxDepth = depthValues.length
+        ? Math.max(...depthValues)
+        : null;
+
+      const averageGradient =
+        gradientValues.length
+          ? gradientValues.reduce(
+              (sum, value) => sum + value,
+              0,
+            ) / gradientValues.length
+          : null;
+
+      const bathymetryHead = [
+        'Detection',
+        'Object',
+        'GPS',
+        'Depth',
+        'Gradient',
+        'Zone',
+        'Source',
+      ];
+
+      const bathymetryRows =
+        depthRecords.map((record) => ({
+          Detection: record.detection_id,
+          Object: record.object_label,
+          GPS:
+            record.latitude === '—'
+              ? '—'
+              : fmtCoordinate(
+                  Number(record.latitude),
+                  Number(record.longitude),
+                ),
+          Depth:
+            record.depth_m === '—'
+              ? '—'
+              : `${record.depth_m} m`,
+          Gradient:
+            record.seabed_gradient_deg === '—'
+              ? '—'
+              : `${record.seabed_gradient_deg}°`,
+          Zone: record.ocean_zone,
+          Source:
+            record.source_type ===
+            'live'
+              ? 'Live GEBCO'
+              : record.source_type ===
+                  'synthetic_fallback'
+                ? 'Synthetic fallback'
+                : 'Unavailable',
+        }));
+
+      const oceanographyHead = [
+        'Detection',
+        'Zone',
+        'Est. temp.',
+        'Sound speed',
+        'Pressure',
+        'Light',
+        'Diver / ROV',
+      ];
+
+      const oceanographyRows =
+        depthRecords.map((record) => ({
+          Detection: record.detection_id,
+          Zone: record.ocean_zone,
+          'Est. temp.':
+            record.estimated_water_temp_c ===
+            '—'
+              ? '—'
+              : `${record.estimated_water_temp_c} °C`,
+          'Sound speed':
+            record.sound_speed_mps ===
+            '—'
+              ? '—'
+              : `${record.sound_speed_mps} m/s`,
+          Pressure:
+            record.hydrostatic_pressure_bar ===
+            '—'
+              ? '—'
+              : `${record.hydrostatic_pressure_bar} bar`,
+          Light:
+            record.light_penetration_pct ===
+            '—'
+              ? '—'
+              : `${record.light_penetration_pct}%`,
+          'Diver / ROV':
+            record.diver_classification,
+        }));
+
+      const bathymetryStats: [string, string][] = [
+        [
+          'Positions analysed',
+          String(depthRecords.length),
+        ],
+        [
+          'Live GEBCO results',
+          String(liveCount),
+        ],
+        [
+          'Synthetic fallback results',
+          String(syntheticCount),
+        ],
+        [
+          'Mean depth',
+          averageDepth !== null
+            ? `${averageDepth.toFixed(1)} m`
             : '—',
-          n: maxHits,
-        }),
-      ],
-    };
+        ],
+        [
+          'Depth range',
+          minDepth !== null &&
+          maxDepth !== null
+            ? `${minDepth.toFixed(1)}–${maxDepth.toFixed(1)} m`
+            : '—',
+        ],
+        [
+          'Mean seabed gradient',
+          averageGradient !== null
+            ? `${averageGradient.toFixed(1)}°`
+            : '—',
+        ],
+      ];
 
-    setReports((prev) => [
-      report,
-      ...prev,
-    ]);
+      const report: Report = {
+        id: `RP-${new Date()
+          .getTime()
+          .toString(36)
+          .toUpperCase()}`,
 
-    setOpenReport(report);
+        title: t('rpt.cohortTitle'),
 
-    store.addToast({
-      kind: 'success',
-      title: t('rpt.toastGen'),
-      text: t(
-        'rpt.toastGenText',
-        { id: report.id },
-      ),
-    });
+        window: windowLabel,
+
+        dept: deptLabel,
+
+        createdAt:
+          new Date().toISOString(),
+
+        stats: [
+          [
+            t('rpt.statGenerated'),
+            fmtDT(
+              new Date().toISOString(),
+            ),
+          ],
+          [
+            t('rpt.statWindow'),
+            windowLabel,
+          ],
+          [
+            t('common.department'),
+            deptLabel,
+          ],
+          [
+            t('rpt.statDetections'),
+            String(
+              reportDetections.length,
+            ),
+          ],
+          [
+            t('rpt.statOpenAlerts'),
+            String(openAlerts.length),
+          ],
+          [
+            t('st.resolved'),
+            String(resolved.length),
+          ],
+          [
+            t('rpt.statCritical'),
+            String(byRisk.critical),
+          ],
+          [
+            t('rpt.statHigh'),
+            String(byRisk.high),
+          ],
+          [
+            'Bathymetry positions',
+            String(depthRecords.length),
+          ],
+          [
+            'Live GEBCO',
+            String(liveCount),
+          ],
+          [
+            'Synthetic fallback',
+            String(syntheticCount),
+          ],
+          [
+            'Mean depth',
+            averageDepth !== null
+              ? `${averageDepth.toFixed(1)} m`
+              : '—',
+          ],
+          [
+            'Depth range',
+            minDepth !== null &&
+            maxDepth !== null
+              ? `${minDepth.toFixed(1)}–${maxDepth.toFixed(1)} m`
+              : '—',
+          ],
+          [
+            'Mean seabed gradient',
+            averageGradient !== null
+              ? `${averageGradient.toFixed(1)}°`
+              : '—',
+          ],
+        ],
+
+        head: heads,
+
+        rows: CLASS_LIST.map((c) => {
+          const classDetections =
+            reportDetections.filter(
+              (d) =>
+                d.className === c,
+            );
+
+          const avg =
+            classDetections.length
+              ? (
+                  (classDetections.reduce(
+                    (sum, d) =>
+                      sum + d.confidence,
+                    0,
+                  ) /
+                    classDetections.length) *
+                  100
+                ).toFixed(1)
+              : '—';
+
+          return {
+            [heads[0]]:
+              clsLabel(c, language),
+
+            [heads[1]]:
+              String(
+                classDetections.length,
+              ),
+
+            [heads[2]]:
+              riskLabel(
+                CLASS_META[c].riskBase,
+                language,
+              ),
+
+            [heads[3]]:
+              `${avg}%`,
+
+            [heads[4]]:
+              deptById(
+                classDetections[0]
+                  ?.department ??
+                  'marine-operations',
+              ).shortName,
+          };
+        }).filter(
+          (row) =>
+            row[heads[1]] !== '0',
+        ),
+
+        body: [
+          t('rpt.bodyIntro'),
+
+          t('rpt.bodyObjectDist', {
+            n: reportDetections.length,
+            c: Object.values(
+              byClass,
+            ).filter(Boolean).length,
+          }),
+
+          t('rpt.bodyRiskPosture', {
+            crit: byRisk.critical,
+            high: byRisk.high,
+            med: byRisk.medium,
+            low: byRisk.low,
+          }),
+
+          t('rpt.bodyResponseState', {
+            open: openAlerts.length,
+            resolved: resolved.length,
+          }),
+
+          t('rpt.bodyClassFindings', {
+            cls: topClass
+              ? clsLabel(
+                  topClass,
+                  language,
+                )
+              : '—',
+            n: maxHits,
+          }),
+
+          `BATHYMETRY: ${depthRecords.length} detection position(s) enriched with bathymetry; ${liveCount} live GEBCO result(s) and ${syntheticCount} synthetic fallback result(s).`,
+
+          averageDepth !== null
+            ? `DEPTH: Mean reported depth ${averageDepth.toFixed(1)} m across ${validDepthRecords.length} valid bathymetry result(s), with a range of ${minDepth?.toFixed(1)}–${maxDepth?.toFixed(1)} m.`
+            : 'DEPTH: No bathymetry depth values were available for this report.',
+
+          'NOTE: Water temperature, sound speed, hydrostatic pressure, light penetration and diver classification are depth-derived estimates in the bathymetry response; they are not direct sensor measurements.',
+        ],
+
+        bathymetryRows,
+        bathymetryExportRows:
+          depthRecords,
+        bathymetryHead,
+        bathymetryStats,
+        oceanographyRows,
+        oceanographyHead,
+      };
+
+      setReports((prev) => [
+        report,
+        ...prev,
+      ]);
+
+      setOpenReport(report);
+
+      store.addToast({
+        kind: 'success',
+        title: t('rpt.toastGen'),
+        text: t(
+          'rpt.toastGenText',
+          { id: report.id },
+        ),
+      });
+    } catch {
+      store.addToast({
+        kind: 'alert',
+        title: t('common.failed'),
+        text: 'The report could not be generated. Please try again.',
+      });
+    } finally {
+      setGeneratingReport(false);
+    }
   };
 
   const exportReport = (
@@ -466,7 +856,9 @@ export function HistoryPage() {
       if (format === 'csv') {
         download(
           `${report.id}.csv`,
-          toCSV(report.rows),
+          toCSV(
+            report.bathymetryExportRows,
+          ),
           'text/csv',
         );
       } else if (format === 'json') {
@@ -484,14 +876,29 @@ export function HistoryPage() {
                 report.stats,
               ),
             findings: report.body,
-            data: report.rows,
+            class_summary: {
+              columns: report.head,
+              data: report.rows,
+            },
+            bathymetry_analysis: {
+              summary:
+                Object.fromEntries(
+                  report.bathymetryStats,
+                ),
+              columns:
+                report.bathymetryHead,
+              preview:
+                report.bathymetryRows,
+              records:
+                report.bathymetryExportRows,
+            },
           }),
           'application/json',
         );
       } else {
         downloadReportPDF({
           id: report.id,
-          title: report.title,
+          title: `${report.title} · Bathymetry`,
           window: report.window,
           department: report.dept,
           generatedAt: fmtDT(
@@ -512,11 +919,25 @@ export function HistoryPage() {
                 report.createdAt,
               ),
             }),
+            'Bathymetry provenance is included per position.',
           ],
           stats: report.stats,
           findings: report.body,
           columns: report.head,
           rows: report.rows,
+          secondaryColumns:
+            report.bathymetryHead,
+          secondaryRows:
+            report.bathymetryRows,
+          secondaryLabel:
+            'Bathymetry Analysis & Provenance',
+          tertiaryColumns:
+            report.oceanographyHead,
+          tertiaryRows:
+            report.oceanographyRows,
+          tertiaryLabel:
+            'Derived Oceanographic Estimates',
+          orientation: 'landscape',
           labels: {
             keyMetrics:
               t('rpt.pdfKeyMetrics'),
@@ -572,9 +993,12 @@ export function HistoryPage() {
             <Button
               variant="primary"
               onClick={generateReport}
+              disabled={generatingReport}
             >
               <IconRefresh size={15} />
-              {t('rpt.generate')}
+              {generatingReport
+                ? 'Building report…'
+                : t('rpt.generate')}
             </Button>
 
             <Button
@@ -1202,13 +1626,16 @@ export function HistoryPage() {
                 onClick={
                   generateReport
                 }
+                disabled={generatingReport}
               >
                 <IconRefresh
                   size={15}
                 />
-                {t(
-                  'rpt.generateNow',
-                )}
+                {generatingReport
+                  ? 'Enriching bathymetry…'
+                  : t(
+                      'rpt.generateNow',
+                    )}
               </Button>
             </div>
           </div>
@@ -1507,6 +1934,122 @@ export function HistoryPage() {
                     (row, i) => (
                       <tr key={i}>
                         {openReport.head.map(
+                          (head) => (
+                            <td key={head}>
+                              {row[head]}
+                            </td>
+                          ),
+                        )}
+                      </tr>
+                    ),
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div
+              style={{
+                marginTop: 20,
+                marginBottom: 8,
+                fontSize: 12,
+                fontWeight: 700,
+                color: 'var(--accent)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+              }}
+            >
+              Bathymetry Analysis &amp; Provenance
+            </div>
+
+            <div
+              className="tiny muted"
+              style={{
+                marginBottom: 10,
+                lineHeight: 1.5,
+              }}
+            >
+              Depth values are queried at each detection GPS position.
+              Live GEBCO results and synthetic fallback results are
+              explicitly identified in the export.
+            </div>
+
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    {openReport.bathymetryHead.map(
+                      (head) => (
+                        <th key={head}>
+                          {head}
+                        </th>
+                      ),
+                    )}
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {openReport.bathymetryRows.map(
+                    (row, i) => (
+                      <tr key={i}>
+                        {openReport.bathymetryHead.map(
+                          (head) => (
+                            <td key={head}>
+                              {row[head]}
+                            </td>
+                          ),
+                        )}
+                      </tr>
+                    ),
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <div
+              style={{
+                marginTop: 20,
+                marginBottom: 8,
+                fontSize: 12,
+                fontWeight: 700,
+                color: 'var(--accent)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
+              }}
+            >
+              Derived Oceanographic Estimates
+            </div>
+
+            <div
+              className="tiny muted"
+              style={{
+                marginBottom: 10,
+                lineHeight: 1.5,
+              }}
+            >
+              Temperature, sound speed, pressure, light penetration and
+              diver classification are calculated from the reported depth;
+              they are estimates, not direct sensor observations.
+            </div>
+
+            <div className="table-wrap">
+              <table className="table">
+                <thead>
+                  <tr>
+                    {openReport.oceanographyHead.map(
+                      (head) => (
+                        <th key={head}>
+                          {head}
+                        </th>
+                      ),
+                    )}
+                  </tr>
+                </thead>
+
+                <tbody>
+                  {openReport.oceanographyRows.map(
+                    (row, i) => (
+                      <tr key={i}>
+                        {openReport.oceanographyHead.map(
                           (head) => (
                             <td key={head}>
                               {row[head]}

@@ -15,6 +15,7 @@ import type {
 } from '../types';
 
 import { jsPDF } from 'jspdf';
+import { imageCache } from './detect';
 import type { ModelPrediction } from './detect';
 import { makeT } from './i18n';
 import { fetchGebcoDepth, type GebcoDepthResponse } from './gebco';
@@ -642,6 +643,12 @@ export interface ReportPdfData {
   tertiaryRows?: Record<string, string>[];
   tertiaryLabel?: string;
   orientation?: 'portrait' | 'landscape';
+  annotatedImage?: {
+    dataUrl: string;
+    width: number;
+    height: number;
+    caption?: string;
+  };
   labels: {
     keyMetrics: string;
     findings: string;
@@ -988,6 +995,96 @@ export function downloadReportPDF(data: ReportPdfData) {
 
   drawTitle();
   drawMetadata();
+
+  if (data.annotatedImage?.dataUrl) {
+    drawSection('Annotated Detection Frame');
+
+    const image = data.annotatedImage;
+    const maxImageWidth = contentWidth;
+    const maxImageHeight = Math.min(
+      pageHeight * 0.46,
+      112,
+    );
+    const aspect = image.width / Math.max(image.height, 1);
+    let imageWidth = maxImageWidth;
+    let imageHeight = imageWidth / Math.max(aspect, 0.01);
+
+    if (imageHeight > maxImageHeight) {
+      imageHeight = maxImageHeight;
+      imageWidth = imageHeight * aspect;
+    }
+
+    ensureSpace(imageHeight + 12);
+    const imageX = margin + (contentWidth - imageWidth) / 2;
+
+    doc.setFillColor(
+      lightFill[0],
+      lightFill[1],
+      lightFill[2],
+    );
+    doc.roundedRect(
+      imageX - 1.5,
+      y - 1.5,
+      imageWidth + 3,
+      imageHeight + 3,
+      1.5,
+      1.5,
+      'F',
+    );
+
+    try {
+      doc.addImage(
+        image.dataUrl,
+        'JPEG',
+        imageX,
+        y,
+        imageWidth,
+        imageHeight,
+        undefined,
+        'MEDIUM',
+      );
+      doc.setDrawColor(
+        border[0],
+        border[1],
+        border[2],
+      );
+      doc.setLineWidth(0.35);
+      doc.roundedRect(
+        imageX,
+        y,
+        imageWidth,
+        imageHeight,
+        1.5,
+        1.5,
+        'S',
+      );
+      y += imageHeight + 4;
+
+      if (image.caption) {
+        const captionLines = wrap(
+          image.caption,
+          contentWidth,
+        );
+        ensureSpace(captionLines.length * lineHeight + 3);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(
+          muted[0],
+          muted[1],
+          muted[2],
+        );
+        doc.text(
+          captionLines,
+          margin,
+          y + 3,
+        );
+        y += captionLines.length * lineHeight + 3;
+      }
+    } catch {
+      /* If the image cannot be embedded, keep the report usable. */
+    }
+  }
+
   drawSection(data.labels.keyMetrics);
   drawStats();
   drawSection(data.labels.findings);
@@ -1151,12 +1248,44 @@ export function downloadDetectionReport(
   const fileName = detectionReportFileName(source);
   const cachedBathymetry = source.bathymetry ?? null;
 
+  if (format === 'pdf') {
+    const buildPdf = async () => {
+      let bathymetry = cachedBathymetry;
+
+      if (!bathymetry && source.detection?.gps) {
+        try {
+          bathymetry = await fetchGebcoDepth(
+            source.detection.gps.latitude,
+            source.detection.gps.longitude,
+            { spanKm: 1.2, samples: 11 },
+          );
+        } catch {
+          bathymetry = null;
+        }
+      }
+
+      const annotatedImage = await createAnnotatedDetectionImage(source);
+
+      buildDetectionReport(
+        source,
+        format,
+        language,
+        bathymetry,
+        annotatedImage,
+      );
+    };
+
+    void buildPdf();
+    return `${fileName}.pdf`;
+  }
+
   if (cachedBathymetry || !source.detection?.gps) {
     return buildDetectionReport(
       source,
       format,
       language,
       cachedBathymetry,
+      null,
     );
   }
 
@@ -1171,6 +1300,7 @@ export function downloadDetectionReport(
         format,
         language,
         bathymetry,
+        null,
       );
     })
     .catch(() => {
@@ -1179,13 +1309,227 @@ export function downloadDetectionReport(
         format,
         language,
         null,
+        null,
       );
     });
 
   return `${fileName}.${format}`;
 }
 
-function buildDetectionReport(source: DetectionReportSource, format: DetectionReportFormat, language: Language, bathymetryOverride: GebcoDepthResponse | null): string {
+interface AnnotatedDetectionImage {
+  dataUrl: string;
+  width: number;
+  height: number;
+  caption: string;
+}
+
+async function createAnnotatedDetectionImage(
+  source: DetectionReportSource,
+): Promise<AnnotatedDetectionImage | null> {
+  if (typeof window === 'undefined' || typeof Image === 'undefined') {
+    return null;
+  }
+
+  const imageUrl =
+    source.detection?.imageUrl ??
+    imageCache.get(source.id) ??
+    imageCache.get(source.imageId);
+
+  if (!imageUrl) return null;
+
+  const predictions = detectionReportPredictions(source);
+  if (!predictions.length) return null;
+
+  return new Promise((resolve) => {
+    const img = new Image();
+
+    img.onload = () => {
+      try {
+        const maxDim = 1400;
+        const scale = Math.min(
+          1,
+          maxDim / Math.max(img.naturalWidth, img.naturalHeight),
+        );
+        const width = Math.max(
+          1,
+          Math.round(img.naturalWidth * scale),
+        );
+        const height = Math.max(
+          1,
+          Math.round(img.naturalHeight * scale),
+        );
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(null);
+          return;
+        }
+
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const selectedIndex = predictions.length > 0
+          ? Math.min(
+              Math.max(source.selectedIndex ?? 0, 0),
+              predictions.length - 1,
+            )
+          : -1;
+
+        const lineWidth = Math.max(
+          3,
+          Math.round(Math.min(width, height) * 0.006),
+        );
+        const fontSize = Math.max(
+          16,
+          Math.round(Math.min(width, height) * 0.028),
+        );
+        const pad = Math.max(7, Math.round(fontSize * 0.42));
+        const radius = Math.max(4, Math.round(fontSize * 0.28));
+
+        ctx.textBaseline = 'middle';
+        ctx.font = `700 ${fontSize}px Arial`;
+
+        predictions.forEach((prediction, index) => {
+          const x = Math.max(
+            0,
+            Math.min(width, prediction.bbox.x * width),
+          );
+          const y = Math.max(
+            0,
+            Math.min(height, prediction.bbox.y * height),
+          );
+          const boxWidth = Math.max(
+            1,
+            Math.min(
+              width - x,
+              prediction.bbox.width * width,
+            ),
+          );
+          const boxHeight = Math.max(
+            1,
+            Math.min(
+              height - y,
+              prediction.bbox.height * height,
+            ),
+          );
+          const isSelected = index === selectedIndex;
+
+          ctx.save();
+          ctx.lineWidth = isSelected ? lineWidth + 1 : lineWidth;
+          ctx.strokeStyle = isSelected
+            ? '#00d9ff'
+            : 'rgba(255,255,255,0.92)';
+          ctx.shadowColor = 'rgba(0,0,0,0.75)';
+          ctx.shadowBlur = isSelected ? 7 : 4;
+          ctx.strokeRect(
+            x,
+            y,
+            boxWidth,
+            boxHeight,
+          );
+          ctx.restore();
+
+          const label = `#${index + 1} ${prediction.label} · ${(
+            prediction.confidence * 100
+          ).toFixed(1)}%`;
+
+          const textWidth = ctx.measureText(label).width;
+          const labelWidth = textWidth + pad * 2;
+          const labelHeight = fontSize + pad * 1.5;
+
+          let labelX = x;
+          let labelY = y - labelHeight - 2;
+
+          if (labelY < 2) {
+            labelY = Math.min(
+              height - labelHeight - 2,
+              y + boxHeight + 2,
+            );
+          }
+          if (labelX + labelWidth > width - 2) {
+            labelX = Math.max(2, width - labelWidth - 2);
+          }
+
+          ctx.save();
+          ctx.fillStyle = isSelected
+            ? 'rgba(0,217,255,0.94)'
+            : 'rgba(2,8,16,0.90)';
+
+          const r = radius;
+          ctx.beginPath();
+          ctx.moveTo(labelX + r, labelY);
+          ctx.lineTo(labelX + labelWidth - r, labelY);
+          ctx.quadraticCurveTo(
+            labelX + labelWidth,
+            labelY,
+            labelX + labelWidth,
+            labelY + r,
+          );
+          ctx.lineTo(
+            labelX + labelWidth,
+            labelY + labelHeight - r,
+          );
+          ctx.quadraticCurveTo(
+            labelX + labelWidth,
+            labelY + labelHeight,
+            labelX + labelWidth - r,
+            labelY + labelHeight,
+          );
+          ctx.lineTo(labelX + r, labelY + labelHeight);
+          ctx.quadraticCurveTo(
+            labelX,
+            labelY + labelHeight,
+            labelX,
+            labelY + labelHeight - r,
+          );
+          ctx.lineTo(labelX, labelY + r);
+          ctx.quadraticCurveTo(
+            labelX,
+            labelY,
+            labelX + r,
+            labelY,
+          );
+          ctx.closePath();
+          ctx.fill();
+
+          ctx.fillStyle = isSelected ? '#00131a' : '#ffffff';
+          ctx.font = `700 ${fontSize}px Arial`;
+          ctx.fillText(
+            label,
+            labelX + pad,
+            labelY + labelHeight / 2,
+          );
+          ctx.restore();
+        });
+
+        const dataUrl = canvas.toDataURL(
+          'image/jpeg',
+          0.92,
+        );
+
+        resolve({
+          dataUrl,
+          width,
+          height,
+          caption:
+            predictions.length === 1
+              ? 'Annotated frame · 1 detection highlight'
+              : `Annotated frame · ${predictions.length} detection highlights · cyan box indicates the active detection`,
+        });
+      } catch {
+        resolve(null);
+      }
+    };
+
+    img.onerror = () => resolve(null);
+    img.src = imageUrl;
+  });
+}
+
+function buildDetectionReport(source: DetectionReportSource, format: DetectionReportFormat, language: Language, bathymetryOverride: GebcoDepthResponse | null, annotatedImage: AnnotatedDetectionImage | null = null): string {
   const predictions = detectionReportPredictions(source);
   const selectedIndex = predictions.length > 0
     ? Math.min(Math.max(source.selectedIndex ?? 0, 0), predictions.length - 1)
@@ -1456,6 +1800,14 @@ function buildDetectionReport(source: DetectionReportSource, format: DetectionRe
     tertiaryRows: oceanographyRows,
     tertiaryLabel: 'Derived Oceanographic Estimates',
     orientation: 'landscape',
+    annotatedImage: annotatedImage
+      ? {
+          dataUrl: annotatedImage.dataUrl,
+          width: annotatedImage.width,
+          height: annotatedImage.height,
+          caption: annotatedImage.caption,
+        }
+      : undefined,
     labels: {
       keyMetrics: t('rpt.pdfKeyMetrics'),
       findings: t('rpt.pdfFindings'),
