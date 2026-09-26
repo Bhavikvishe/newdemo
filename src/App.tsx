@@ -16,7 +16,6 @@ import { DepthAnalysisPage } from './pages/DepthAnalysis';
 import { MapPage } from './pages/Map';
 import { AlertsPage } from './pages/Alerts';
 import { HistoryPage } from './pages/History';
-import { ReportsPage } from './pages/Reports';
 import { SettingsPage } from './pages/Settings';
 import { DepartmentsPage } from './pages/Departments';
 import { MyDepartmentPage } from './pages/MyDepartment';
@@ -54,9 +53,6 @@ function Page({
 
     case 'history':
       return <HistoryPage />;
-
-    case 'reports':
-      return <ReportsPage />;
 
     case 'settings':
       return <SettingsPage />;

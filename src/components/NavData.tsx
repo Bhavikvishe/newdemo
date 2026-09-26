@@ -1,9 +1,9 @@
 import type { SessionUser } from '../types';
 import type { ComponentType } from 'react';
+
 import {
   IconActivity,
   IconAlert,
-  IconBars,
   IconDoc,
   IconGear,
   IconHelm,
@@ -19,8 +19,12 @@ export interface NavItem {
   id: string;
   labelKey: string;
   href: string;
-  icon: ComponentType<{ size?: number }>;
-  badge?: { n: 'alerts' } | { n: 'critical' };
+  icon: ComponentType<{
+    size?: number;
+  }>;
+  badge?:
+    | { n: 'alerts' }
+    | { n: 'critical' };
 }
 
 export interface NavSection {
@@ -29,7 +33,8 @@ export interface NavSection {
   items: NavItem[];
 }
 
-export const CLAUSE_OVERVIEW = 'overview';
+export const CLAUSE_OVERVIEW =
+  'overview';
 
 export function myDeptLabel(
   user: SessionUser,
@@ -102,7 +107,9 @@ export function buildNav(
       labelKey: 'nav.alerts',
       href: 'alerts',
       icon: IconAlert,
-      badge: { n: 'alerts' },
+      badge: {
+        n: 'alerts',
+      },
     },
 
     {
@@ -110,13 +117,6 @@ export function buildNav(
       labelKey: 'nav.history',
       href: 'history',
       icon: IconDoc,
-    },
-
-    {
-      id: 'reports',
-      labelKey: 'nav.reports',
-      href: 'reports',
-      icon: IconBars,
     },
   ];
 
@@ -165,7 +165,7 @@ export function buildNav(
     {
       id: 'ops',
       labelKey: 'nav.main',
-      items: common.slice(5, 8),
+      items: common.slice(5, 7),
     },
 
     {
