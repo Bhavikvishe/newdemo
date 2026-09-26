@@ -84,7 +84,7 @@ export function LoginPage() {
         <div className="row" style={{ gap: 10 }}>
           <OceMark size={40} />
           <div>
-            <b style={{ fontFamily: 'var(--font-display)', fontSize: 18, letterSpacing: '0.12em', background: 'linear-gradient(90deg, var(--accent-2), var(--neon))', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', filter: 'drop-shadow(0 0 10px color-mix(in srgb, var(--accent) 45%, transparent))' }}>OCEONIX</b>
+            <b style={{ fontFamily: 'var(--font-display)', fontSize: 18, letterSpacing: '0.12em', background: 'linear-gradient(90deg, var(--accent-2), var(--neon))', WebkitBackgroundClip: 'text', backgroundClip: 'text', WebkitTextFillColor: 'transparent', filter: 'drop-shadow(0 0 10px color-mix(in srgb, var(--accent) 45%, transparent))' }}>ANVESHA</b>
             <div className="tiny upper muted">{t('app.tagline')}</div>
           </div>
         </div>
@@ -166,7 +166,7 @@ export function LoginPage() {
 
                 <div className="field" style={{ marginBottom: 14 }}>
                   <label>{t('login.username')}</label>
-                  <input className="input" value={username} onChange={(e) => { setUsername(e.target.value); setFailed(false); }} placeholder="operator@oceonix.ai" autoComplete="username" />
+                  <input className="input" value={username} onChange={(e) => { setUsername(e.target.value); setFailed(false); }} placeholder="operator@anvesha.ai" autoComplete="username" />
                 </div>
 
                 <div className="field" style={{ marginBottom: 14 }}>
@@ -200,7 +200,7 @@ export function LoginPage() {
 
                 <div className="field" style={{ marginBottom: 14 }}>
                   <label>{t('login.email')}</label>
-                  <input className="input" value={rEmail} onChange={(e) => { setREmail(e.target.value); setRegError(''); }} placeholder="anita@oceonix.ai" autoComplete="email" />
+                  <input className="input" value={rEmail} onChange={(e) => { setREmail(e.target.value); setRegError(''); }} placeholder="anita@anvesha.ai" autoComplete="email" />
                 </div>
 
                 <div className="field" style={{ marginBottom: 14 }}>
@@ -235,7 +235,7 @@ export function LoginPage() {
       </div>
 
       <footer style={{ padding: '18px 34px', borderTop: '1px solid var(--line-faint)', color: 'var(--ink-3)', fontSize: 11.5, display: 'flex', gap: 20, flexWrap: 'wrap' }}>
-        <span>OCEONIX v2.4.1</span>
+        <span>ANVESHA v2.4.1</span>
         <span style={{ marginLeft: 'auto' }}>{t('lgn.unauthorized')}</span>
       </footer>
     </div>

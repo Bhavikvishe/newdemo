@@ -332,7 +332,7 @@ export const imageCache =
   new Map<string, string>();
 
 const IDB_NAME =
-  'oceonix_img_cache_v1';
+  'anvesha_img_cache_v1';
 
 const IDB_STORE =
   'images';

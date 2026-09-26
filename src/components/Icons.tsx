@@ -23,7 +23,7 @@ function Svg({ size = 17, children, ...rest }: IconProps & { children: ReactNode
   );
 }
 
-/** OCEONIX mark — sonar rings + coordinate core + current lines */
+/** ANVESHA mark — sonar rings + coordinate core + current lines */
 export function IconSonar(props: IconProps) {
   return (
     <Svg {...props}>

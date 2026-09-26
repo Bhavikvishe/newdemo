@@ -25,7 +25,7 @@ import {
 import { makeT } from './i18n';
 import { clearCachedImages, setCachedImage, getCachedImage } from './detect';
 
-const STORE_KEY = 'oceonix.store.v1';
+const STORE_KEY = 'anvesha.store.v1';
 
 interface PersistShape {
   user: SessionUser | null;
@@ -316,7 +316,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             title: t('stx.tlDetection'),
             description: t('stx.tlDetectionDesc'),
             timestamp: det.detectionTime,
-            actor: 'OCEONIX AI',
+            actor: 'ANVESHA AI',
             department: det.department,
           },
           {
@@ -325,7 +325,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             title: t('stx.tlAnalysis'),
             description: t('stx.tlAnalysisDesc', { desc: meta.description, pct: (det.confidence * 100).toFixed(1) }),
             timestamp: det.detectionTime,
-            actor: 'OCEONIX AI',
+            actor: 'ANVESHA AI',
             department: det.department,
           },
           {
@@ -334,7 +334,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             title: t('stx.tlRouted'),
             description: t('stx.tlRoutedDesc', { dept: deptById(det.department).name }),
             timestamp: det.detectionTime,
-            actor: 'OCEONIX AI',
+            actor: 'ANVESHA AI',
             department: det.department,
           },
         ],
@@ -715,7 +715,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             title: 'Sonar Detection Triggered',
             description: `Real acoustic return confirmed. ${det.rawLabel} detected.`,
             timestamp: det.detectionTime,
-            actor: 'OCEONIX AI',
+            actor: 'ANVESHA AI',
             department: det.department,
           },
           {
@@ -724,7 +724,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             title: 'Initial Department Routing',
             description: `Routed to ${deptById(det.department).name}.`,
             timestamp: det.detectionTime,
-            actor: 'OCEONIX AI',
+            actor: 'ANVESHA AI',
             department: det.department,
           },
         ],
@@ -747,7 +747,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     mutateAlert(id, (a) => ({
       ...a,
       status: 'manual_verification',
-      timeline: [...a.timeline, pushTimeline(a, 'verification', 'Verification requested', 'Manual verification requested for this detection.', 'OCEONIX AI')],
+      timeline: [...a.timeline, pushTimeline(a, 'verification', 'Verification requested', 'Manual verification requested for this detection.', 'ANVESHA AI')],
     }));
   }, [mutateAlert]);
 

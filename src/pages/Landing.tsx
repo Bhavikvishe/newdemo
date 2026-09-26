@@ -97,7 +97,7 @@ export function LandingPage() {
         <div className="row" style={{ gap: 10 }}>
           <OceMark size={38} />
           <div>
-            <b style={{ fontFamily: 'var(--font-display)', fontSize: 17, letterSpacing: '0.02em' }}>OCEONIX</b>
+            <b style={{ fontFamily: 'var(--font-display)', fontSize: 17, letterSpacing: '0.02em' }}>ANVESHA</b>
             <div className="tiny upper muted">{t('app.tagline')}</div>
           </div>
         </div>

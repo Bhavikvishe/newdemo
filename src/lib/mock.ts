@@ -409,9 +409,9 @@ function alertTimeline(det: Detection, status: AlertStatus) {
   const rows: Alert['timeline'][] = [];
 
   rows.push([
-    ev('detection', 'Sonar detection recorded', `Side-scan frame confirmed ${meta.description}`, 0, 'OCEONIX AI', det.department, { meta: det.detectionTime }),
-    ev('analysis', 'Marine intelligence analysis', `Class ${det.className.toUpperCase()} at conf ${(det.confidence * 100).toFixed(1)}%.`, 2, 'OCEONIX AI', det.department),
-    ev('verification', 'Confidence verification', det.confidence > 0.8 ? 'Auto-verified above threshold.' : 'Manual verification requested.', 5, 'OCEONIX AI', det.department),
+    ev('detection', 'Sonar detection recorded', `Side-scan frame confirmed ${meta.description}`, 0, 'ANVESHA AI', det.department, { meta: det.detectionTime }),
+    ev('analysis', 'Marine intelligence analysis', `Class ${det.className.toUpperCase()} at conf ${(det.confidence * 100).toFixed(1)}%.`, 2, 'ANVESHA AI', det.department),
+    ev('verification', 'Confidence verification', det.confidence > 0.8 ? 'Auto-verified above threshold.' : 'Manual verification requested.', 5, 'ANVESHA AI', det.department),
     ev('assignment', 'Alert routed', `Routed to ${meta.primary} by routing rule.`, 7, 'Routing Engine', det.department),
     ev('note', 'Department notified', `Inbox notification pushed to ${meta.primary} operators.`, 8, 'Routing Engine', det.department),
   ]);
@@ -705,8 +705,8 @@ export function downloadReportPDF(data: ReportPdfData) {
   doc.setProperties({
     title: data.title,
     subject: data.labels.findings,
-    author: 'OCEONIX',
-    creator: 'OCEONIX',
+    author: 'ANVESHA',
+    creator: 'ANVESHA',
   });
 
   const wrap = (value: string, width: number) => {
@@ -1157,7 +1157,7 @@ export function downloadBatchReportPDF(items: BatchReportItem[], language: Langu
     ? predictions.reduce((sum, prediction) => sum + prediction.confidence, 0) / predictions.length
     : 0;
   const generatedAt = new Date().toISOString();
-  const fileName = 'oceonix-real-batch';
+  const fileName = 'anvesha-real-batch';
   const columns = ['Image', '#', 'Label', 'Confidence', 'BBox (x,y,w,h)', 'Status'];
   const rows = items.flatMap((item) => {
     const image = item.path ?? item.filename;

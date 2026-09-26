@@ -219,14 +219,14 @@ function generateFallbackBathymetry(
   return {
     status: 'success',
     api_connected: false,
-    dataset: 'OCEONIX_SYNTHETIC_FALLBACK',
+    dataset: 'ANVESHA_SYNTHETIC_FALLBACK',
     source:
-      'OCEONIX local synthetic bathymetry fallback',
+      'ANVESHA local synthetic bathymetry fallback',
     resolution:
       'Synthetic model — not a GEBCO measurement',
     provenance: {
       source_name:
-        'OCEONIX local synthetic bathymetry fallback',
+        'ANVESHA local synthetic bathymetry fallback',
       source_type: 'synthetic_fallback',
       is_live: false,
       is_synthetic: true,
