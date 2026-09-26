@@ -1,5 +1,5 @@
 ﻿export const xEn: Record<string, string> = {
-  'set.headSub': "Detection thresholds, sonar calibration, routing rules, notifications and demo mode live here.",
+  'set.headSub': "Detection thresholds, sonar calibration, routing rules and notifications live here.",
   'set.saveChanges': "Save changes",
   'set.savedNote': "Changes persisted to this browser.",
   'set.resetDefaults': "Reset defaults",
@@ -13,8 +13,6 @@
   'set.confThreshold': "Detection confidence threshold",
   'set.alertClasses': "Alert-generating debris classes",
   'set.classesHint': "Classes outside this list are logged and monitored, but do not raise alerts.",
-  'set.demoMode': "Demo mode",
-  'set.demoDesc': "Simulated responses toggled live from the store.",
   'set.sensorKt': "sensor head",
   'set.sonarCal': "Sonar calibration",
   'set.sonarHint': "Calibration applies to the simulated sweep profile shown across the product.",
@@ -41,12 +39,12 @@
   'set.clearBtn': "Clear data",
   'set.dataCleared': "Data cleared",
   'set.ledgerEmptied': "Ledger emptied.",
-  'set.datasetNote': "Simulated dataset · no external calls",
+  'set.datasetNote': "Model-backed data · external inference available",
   'set.versionBadge': "OCEONIX v1.0",
 };
 
 export const xHi: Record<string, string> = {
-  'set.headSub': "डिटेक्शन थ्रेशोल्ड, सोनार कैलिब्रेशन, रूटिंग नियम, सूचनाएँ और डेमो मोड यहाँ रहते हैं।",
+  'set.headSub': "डिटेक्शन थ्रेशोल्ड, सोनार कैलिब्रेशन, रूटिंग नियम और सूचनाएँ यहाँ रहते हैं।",
   'set.saveChanges': "बदलाव सहेजें",
   'set.savedNote': "बदलाव इस ब्राउज़र में सहेज लिए गए हैं।",
   'set.resetDefaults': "डिफ़ॉल्ट रीसेट करें",
@@ -60,8 +58,6 @@ export const xHi: Record<string, string> = {
   'set.confThreshold': "डिटेक्शन विश्वास सीमा",
   'set.alertClasses': "अलर्ट उत्पन्न करने वाले कचरा वर्ग",
   'set.classesHint': "इस सूची से बाहर के वर्गों को लॉग किया जाता है और उन पर नज़र रखी जाती है, पर अलर्ट नहीं उठाए जाते।",
-  'set.demoMode': "डेमो मोड",
-  'set.demoDesc': "स्टोर से लाइव टॉगल किए गए सिम्युलेटेड प्रतिक्रियाएँ।",
   'set.sensorKt': "सेंसर हेड",
   'set.sonarCal': "सोनार कैलिब्रेशन",
   'set.sonarHint': "कैलिब्रेशन पूरे उत्पाद में दिखाए गए सिम्युलेटेड स्वीप प्रोफ़ाइल पर लागू होता है।",
@@ -88,12 +84,12 @@ export const xHi: Record<string, string> = {
   'set.clearBtn': "डेटा साफ़ करें",
   'set.dataCleared': "डेटा साफ़ हो गया",
   'set.ledgerEmptied': "बही-खाता खाली कर दिया गया।",
-  'set.datasetNote': "सिम्युलेटेड डेटासेट · कोई बाहरी कॉल नहीं",
+  'set.datasetNote': "मॉडल-आधारित डेटा · बाहरी inference उपलब्ध",
   'set.versionBadge': "OCEONIX v1.0",
 };
 
 export const xMr: Record<string, string> = {
-  'set.headSub': "डिटेक्शन थ्रेशोल्ड, सोनार कॅलिब्रेशन, रूटिंग नियम, सूचना आणि डेमो मोड येथे राहतात.",
+  'set.headSub': "डिटेक्शन थ्रेशोल्ड, सोनार कॅलिब्रेशन, रूटिंग नियम आणि सूचना येथे राहतात.",
   'set.saveChanges': "बदल जतन करा",
   'set.savedNote': "बदल या ब्राउझरमध्ये जतन केले गेले.",
   'set.resetDefaults': "डीफॉल्ट रीसेट करा",
@@ -107,8 +103,6 @@ export const xMr: Record<string, string> = {
   'set.confThreshold': "डिटेक्शन आत्मविश्वास मर्यादा",
   'set.alertClasses': "अलर्ट निर्माण करणारे कचरा वर्ग",
   'set.classesHint': "या यादीबाहेरील वर्गांची नोंद व देखरेख केली जाते, पण अलर्ट उठवले जात नाहीत.",
-  'set.demoMode': "डेमो मोड",
-  'set.demoDesc': "स्टोअरमधून लाइव्ह टॉगल केलेल्या सिम्युलेटेड प्रतिसाद.",
   'set.sensorKt': "सेन्सर हेड",
   'set.sonarCal': "सोनार कॅलिब्रेशन",
   'set.sonarHint': "कॅलिब्रेशन संपूर्ण उत्पादनामध्ये दर्शविल्या जाणाऱ्या सिम्युलेटेड स्वीप प्रोफाइलला लागू होते.",
@@ -135,6 +129,6 @@ export const xMr: Record<string, string> = {
   'set.clearBtn': "डेटा साफ करा",
   'set.dataCleared': "डेटा साफ झाला",
   'set.ledgerEmptied': "खातेबही रिकामी केली.",
-  'set.datasetNote': "सिम्युलेटेड डेटासेट · कोणतेही बाह्य कॉल नाहीत",
+  'set.datasetNote': "मॉडेलवर आधारित डेटा · बाह्य inference उपलब्ध",
   'set.versionBadge': "OCEONIX v1.0",
 };

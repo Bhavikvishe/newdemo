@@ -60,7 +60,6 @@ const DEFAULT_SETTINGS: SettingsConfig = {
   },
   theme: 'dark',
   animationLevel: 'full',
-  demoMode: false,
 };
 
 function loadPersist(): PersistShape | null {
@@ -69,16 +68,13 @@ function loadPersist(): PersistShape | null {
     if (!raw) return null;
     const parsed = JSON.parse(raw) as PersistShape;
     if (!parsed.detections || !Array.isArray(parsed.detections)) return null;
-    // Keep only genuine real model detections, filtering out synthetic mock/demo detections
+    // Keep only genuine model detections, filtering out legacy non-real records
     const real = parsed.detections.filter((d) => d.source === 'upload' && (d.isRealModel || d.id?.startsWith('REAL-') || d.id?.startsWith('BATCH-REAL-')));
     const kept = new Set(real.map((d) => d.id));
     parsed.detections = real;
     parsed.alerts = (parsed.alerts ?? []).filter((a) => kept.has(a.detectionId));
     parsed.notifications = (parsed.notifications ?? []).filter((n) => !n.detectionId || kept.has(n.detectionId));
     parsed.aidHistory = parsed.aidHistory ?? [];
-    if (parsed.settings) {
-      parsed.settings.demoMode = false;
-    }
     return parsed;
   } catch {
     return null;

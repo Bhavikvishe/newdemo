@@ -92,15 +92,6 @@ export function SettingsPage() {
                 </div>
                 <div className="tiny muted" style={{ marginTop: 6 }}>{t('set.classesHint')}</div>
               </div>
-              <div className="row-between" style={{ padding: 10, border: '1px solid var(--line-faint)', borderRadius: 10 }}>
-                <div>
-                  <b style={{ fontSize: 13 }}>{t('set.demoMode')}</b>
-                  <div className="tiny muted">{t('set.demoDesc')}</div>
-                </div>
-                <button className={`toggle${settings.demoMode ? ' on' : ''}`} onClick={() => store.updateSettings({ demoMode: !settings.demoMode })}>
-                  <span />
-                </button>
-              </div>
             </div>
           </Card>
         </div>

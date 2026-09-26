@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { useStore } from '../lib/store';
 import { makeT } from '../lib/i18n';
-import { CLASS_META, toCSV, toJSON, download, downloadBatchReportPDF, makeDetectionFromFile } from '../lib/mock';
+import { CLASS_META, toCSV, toJSON, download, downloadBatchReportPDF } from '../lib/mock';
 import type { DetectionReportSource } from '../lib/mock';
 import { fetchPredictions, mapClass, fileToDataUrl, setCachedImage } from '../lib/detect';
 import { clsLabel } from '../lib/labels';
@@ -17,7 +17,6 @@ import {
   IconDoc,
   IconDownload,
   IconPlay,
-  IconShield,
   IconAlert,
 } from '../components/Icons';
 import type { BatchItem, BatchStatus } from './batchTypes';
@@ -76,7 +75,6 @@ export function BatchPage() {
   const t = makeT(language);
   const statusLabel = (s: BatchStatus) => t(STATUS_KEY[s]);
 
-  const [demoMode, setDemoMode] = useState(false);
   const [confThreshold, setConfThreshold] = useState(0.25);
   const [items, setItems] = useState<BatchItem[]>([]);
   const [running, setRunning] = useState(false);
@@ -87,9 +85,6 @@ export function BatchPage() {
   const confThresholdRef = useRef(confThreshold);
   confThresholdRef.current = confThreshold;
 
-  const demoModeRef = useRef(demoMode);
-  demoModeRef.current = demoMode;
-
   const runningRef = useRef(false);
   runningRef.current = running;
 
@@ -97,12 +92,6 @@ export function BatchPage() {
   const folderRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const isWorkerRunningRef = useRef(false);
-
-  const toggleMode = () => {
-    const next = !demoMode;
-    setDemoMode(next);
-    store.updateSettings({ demoMode: next });
-  };
 
   // Clean up on component unmount only
   useEffect(() => {
@@ -158,36 +147,7 @@ export function BatchPage() {
 
         if (!runningRef.current || ctrl.signal.aborted) break;
 
-        if (demoModeRef.current) {
-          // Simulated Demo Mode path
-          await new Promise((r) => setTimeout(r, 600));
-          if (!runningRef.current || ctrl.signal.aborted) break;
-
-          if (targetFile) {
-            const det = makeDetectionFromFile(targetFile);
-            store.recordDetection(det, { silent: true });
-            updateItem(targetId, {
-              status: 'completed',
-              progress: 100,
-              detectionId: det.id,
-              className: det.className,
-              rawLabel: det.className,
-              detectionCount: 1,
-              avgConfidence: det.confidence,
-              predictions: [
-                {
-                  class_id: 0,
-                  label: det.className,
-                  confidence: det.confidence,
-                  bbox: det.boundingBox,
-                },
-              ],
-            });
-          }
-          continue;
-        }
-
-        // REAL MODEL MODE: Call POST /api/detect with the actual image bytes
+        // Call POST /api/detect with the actual image bytes
         try {
           if (!targetFile) throw new Error('File object missing');
 
@@ -576,20 +536,9 @@ export function BatchPage() {
       <PageHead
         kicker={t('batch.title')}
         title={t('nav.batch')}
-        sub={demoMode ? 'Batch Scan (Demo Mode / Simulated Mock Detections)' : 'Batch Scan (Real AI Model: best.pt)'}
+        sub="Batch Scan (Real AI Model: best.pt)"
         right={
           <div className="row wrap" style={{ gap: 8, alignItems: 'center' }}>
-            {/* Mode Switcher */}
-            <button
-              onClick={toggleMode}
-              className={`btn btn-sm ${demoMode ? 'btn-secondary' : 'btn-primary'}`}
-              title="Toggle between Real AI Model inference and Simulated Demo Mode"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-            >
-              <IconShield size={14} />
-              <span>{demoMode ? '⚠️ Switch to Real AI Model' : '✓ Real Model (best.pt)'}</span>
-            </button>
-
             {/* Threshold Selector */}
             <div className="row" style={{ alignItems: 'center', gap: 6, fontSize: 12.5 }}>
               <span className="muted">Conf:</span>
@@ -634,39 +583,6 @@ export function BatchPage() {
         }
       />
 
-      {demoMode && (
-        <div
-          style={{
-            background: 'rgba(234, 179, 8, 0.12)',
-            border: '1px solid rgba(234, 179, 8, 0.4)',
-            borderRadius: 8,
-            padding: '12px 18px',
-            marginBottom: 16,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
-            color: '#fef08a',
-            fontSize: 13,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <IconAlert size={20} />
-            <div>
-              <strong style={{ display: 'block', marginBottom: 2 }}>Simulation Mode Active (Mock Data)</strong>
-              <span>Batch scans in this mode run offline random simulations and do <em>not</em> send frames to the trained <code>best.pt</code> model.</span>
-            </div>
-          </div>
-          <button
-            onClick={toggleMode}
-            className="btn btn-sm btn-primary"
-            style={{ whiteSpace: 'nowrap' }}
-          >
-            Switch to Real AI Model (best.pt)
-          </button>
-        </div>
-      )}
-
       {/* Real Statistics Grid */}
       <div className="stat-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
         <div className="card">
@@ -703,7 +619,7 @@ export function BatchPage() {
           <div style={{ flex: 1 }}>
             <div className="row-between" style={{ marginBottom: 6 }}>
               <span className="tiny upper muted">
-                {demoMode ? 'Batch Progress (Simulated)' : `Batch Progress (best.pt · Conf: ${confThreshold.toFixed(2)})`}
+                {`Batch Progress (best.pt · Conf: ${confThreshold.toFixed(2)})`}
               </span>
               <b className="mono small" style={{ color: allDone ? 'var(--teal)' : 'var(--accent)' }}>
                 {allDone ? t('batch.complete') : `${Math.round(overall)}%`}

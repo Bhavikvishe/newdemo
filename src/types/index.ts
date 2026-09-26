@@ -323,7 +323,6 @@ export interface UserPreferences {
   notifications: boolean;
   soundAlerts: boolean;
   compactMode: boolean;
-  demoMode: boolean;
 }
 
 export interface OnboardingStep {
@@ -524,7 +523,6 @@ export interface SettingsConfig {
   notificationPreferences: NotificationPreferences;
   theme: Theme;
   animationLevel: 'full' | 'reduced' | 'none';
-  demoMode: boolean;
 }
 
 export interface EquipmentRule {

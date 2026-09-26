@@ -372,37 +372,6 @@ export function createRandomDetection(className?: DetectionClass, site?: Site): 
   return makeDetection({ className, site });
 }
 
-function hashFileKey(file: File): number {
-  const key = `${file.name}:${file.size}:${file.lastModified}`;
-  let h = 2166136261;
-  for (let i = 0; i < key.length; i++) {
-    h ^= key.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  return h >>> 0;
-}
-
-export function makeDetectionFromFile(
-  file: File,
-  opts: {
-    className?: DetectionClass;
-    confidence?: number;
-    bbox?: { x: number; y: number; width: number; height: number };
-  } = {},
-): Detection {
-  const iso = new Date(file.lastModified || Date.now()).toISOString();
-  const det = makeDetection({
-    className: opts.className,
-    iso,
-    rng: mulberry32(hashFileKey(file)),
-    imageId: file.name,
-    source: 'upload',
-  });
-  if (opts.confidence != null) det.confidence = opts.confidence;
-  if (opts.bbox) det.boundingBox = { ...det.boundingBox, ...opts.bbox, normalized: true };
-  return det;
-}
-
 /* ------------------------------------------------------------------ */
 /*  timeline + alerts                                                  */
 /* ------------------------------------------------------------------ */
