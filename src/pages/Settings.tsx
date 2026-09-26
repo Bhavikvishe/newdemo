@@ -1,24 +1,19 @@
-import { useState } from 'react';
 import { useStore } from '../lib/store';
-import { makeT, LANGS } from '../lib/i18n';
-import { CLASS_LIST } from '../lib/mock';
-import { clsLabel } from '../lib/labels';
-import { PageHead, Card, CardHead, Button, Select } from '../lib/ui';
-import { IconGlobe, IconMoon, IconRefresh, IconSonar } from '../components/Icons';
-import type { Language } from '../types';
+import { makeT } from '../lib/i18n';
+import { PageHead, Card, CardHead, Button } from '../lib/ui';
+import {
+  IconGlobe,
+  IconMoon,
+  IconRefresh,
+  IconSonar,
+} from '../components/Icons';
 
 export function SettingsPage() {
   const store = useStore();
-  const { settings, language, theme } = store;
-  const t = makeT(language);
-
-  const [lang, setLang] = useState<Language>(language);
+  const { settings, theme } = store;
+  const t = makeT(store.language);
 
   const savePreferences = () => {
-    if (lang !== store.language) {
-      store.setLanguage(lang);
-    }
-
     store.saveSettings();
 
     store.addToast({
@@ -30,7 +25,6 @@ export function SettingsPage() {
 
   const resetPreferences = () => {
     store.resetSettings();
-    setLang(store.language);
 
     store.addToast({
       kind: 'success',
@@ -62,191 +56,88 @@ export function SettingsPage() {
         sub={t('set.headSub')}
         right={
           <div className="row wrap" style={{ gap: 8 }}>
-            <Button variant="primary" onClick={savePreferences}>
+            <Button
+              variant="primary"
+              onClick={savePreferences}
+            >
               {t('set.saveChanges')}
             </Button>
 
-            <Button variant="secondary" onClick={resetPreferences}>
+            <Button
+              variant="secondary"
+              onClick={resetPreferences}
+            >
               {t('set.resetDefaults')}
             </Button>
           </div>
         }
       />
 
-      <div className="grid cols-12" style={{ gap: 16 }}>
-        {/* Appearance */}
-        <div className="span-6">
-          <Card className="h-full">
-            <CardHead
-              kt={t('set.appearanceKt')}
-              title={t('set.themeLang')}
-            />
+      {/* Appearance */}
+      <Card>
+        <CardHead
+          kt={t('set.appearanceKt')}
+          title={t('set.theme')}
+        />
 
-            <div className="stack" style={{ gap: 18 }}>
-              <div>
-                <div
-                  className="tiny upper muted"
-                  style={{ marginBottom: 8 }}
-                >
-                  {t('set.theme')}
-                </div>
-
-                <div className="row wrap" style={{ gap: 8 }}>
-                  {(['dark', 'light'] as const).map((th) => (
-                    <button
-                      key={th}
-                      type="button"
-                      onClick={() => store.setTheme(th)}
-                      className={`setting-tile${theme === th ? ' on' : ''}`}
-                      style={{ minWidth: 145 }}
-                    >
-                      {th === 'dark' ? (
-                        <IconMoon size={18} />
-                      ) : (
-                        <IconGlobe size={18} />
-                      )}
-
-                      <span>
-                        {th === 'dark'
-                          ? t('set.dark')
-                          : t('set.light')}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <div
-                  className="tiny upper muted"
-                  style={{ marginBottom: 8 }}
-                >
-                  {t('common.language')}
-                </div>
-
-                <Select
-                  value={lang}
-                  onChange={(value) => setLang(value as Language)}
-                  options={LANGS.map((item) => ({
-                    value: item.code,
-                    label: item.native,
-                  }))}
-                />
-              </div>
-
-              <div className="tiny muted">
-                {t('set.prefNote')}
-              </div>
+        <div
+          className="stack"
+          style={{
+            gap: 18,
+            paddingBottom: 4,
+          }}
+        >
+          <div>
+            <div
+              className="tiny upper muted"
+              style={{ marginBottom: 8 }}
+            >
+              {t('set.theme')}
             </div>
-          </Card>
-        </div>
 
-        {/* Detection */}
-        <div className="span-6">
-          <Card className="h-full">
-            <CardHead
-              kt={t('set.detectionKt')}
-              title={t('set.classAlerts')}
-            />
-
-            <div className="stack" style={{ gap: 18 }}>
-              <div>
-                <div
-                  className="row-between"
-                  style={{ marginBottom: 7 }}
+            <div
+              className="row wrap"
+              style={{ gap: 8 }}
+            >
+              {(['dark', 'light'] as const).map((th) => (
+                <button
+                  key={th}
+                  type="button"
+                  onClick={() => store.setTheme(th)}
+                  className={`setting-tile${
+                    theme === th ? ' on' : ''
+                  }`}
+                  style={{ minWidth: 145 }}
                 >
-                  <span className="tiny upper muted">
-                    {t('set.confThreshold')}
-                  </span>
-
-                  <b className="mono tiny">
-                    {Math.round(
-                      settings.detectionConfidenceThreshold * 100,
-                    )}
-                    %
-                  </b>
-                </div>
-
-                <input
-                  type="range"
-                  min={20}
-                  max={95}
-                  step={1}
-                  value={Math.round(
-                    settings.detectionConfidenceThreshold * 100,
+                  {th === 'dark' ? (
+                    <IconMoon size={18} />
+                  ) : (
+                    <IconGlobe size={18} />
                   )}
-                  onChange={(event) =>
-                    store.updateSettings({
-                      detectionConfidenceThreshold:
-                        Number(event.target.value) / 100,
-                    })
-                  }
-                />
 
-                <div
-                  className="row-between tiny muted"
-                  style={{ marginTop: 5 }}
-                >
-                  <span>20%</span>
-                  <span>95%</span>
-                </div>
-              </div>
-
-              <div>
-                <div
-                  className="tiny upper muted"
-                  style={{ marginBottom: 8 }}
-                >
-                  {t('set.alertClasses')}
-                </div>
-
-                <div
-                  className="row wrap"
-                  style={{ gap: 6 }}
-                >
-                  {CLASS_LIST.map((cls) => {
-                    const enabled =
-                      settings.debrisClasses.includes(cls);
-
-                    return (
-                      <button
-                        key={cls}
-                        type="button"
-                        className={`chip${enabled ? ' on' : ''}`}
-                        onClick={() =>
-                          store.updateSettings({
-                            debrisClasses: enabled
-                              ? settings.debrisClasses.filter(
-                                  (item) => item !== cls,
-                                )
-                              : [
-                                  ...settings.debrisClasses,
-                                  cls,
-                                ],
-                          })
-                        }
-                      >
-                        {clsLabel(cls, language)}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div
-                  className="tiny muted"
-                  style={{ marginTop: 7 }}
-                >
-                  {t('set.classesHint')}
-                </div>
-              </div>
+                  <span>
+                    {th === 'dark'
+                      ? t('set.dark')
+                      : t('set.light')}
+                  </span>
+                </button>
+              ))}
             </div>
-          </Card>
-        </div>
-      </div>
+          </div>
 
+          <div className="tiny muted">
+            {t('set.prefNote')}
+          </div>
+        </div>
+      </Card>
+
+      {/* Notifications + Application */}
       <div
         className="grid cols-12"
-        style={{ marginTop: 16, gap: 16 }}
+        style={{
+          marginTop: 16,
+          gap: 16,
+        }}
       >
         {/* Notifications */}
         <div className="span-6">
@@ -256,7 +147,10 @@ export function SettingsPage() {
               title={t('set.notifyPrefs')}
             />
 
-            <div className="stack" style={{ gap: 8 }}>
+            <div
+              className="stack"
+              style={{ gap: 8 }}
+            >
               {(
                 [
                   ['criticalOnly', 'set.critOnly'],
@@ -290,7 +184,9 @@ export function SettingsPage() {
                     type="button"
                     aria-label={t(label)}
                     className={`toggle${
-                      settings.notificationPreferences[key]
+                      settings.notificationPreferences[
+                        key
+                      ]
                         ? ' on'
                         : ''
                     }`}
@@ -314,7 +210,11 @@ export function SettingsPage() {
               title={t('set.demoUtility')}
             />
 
-            <div className="stack" style={{ gap: 10 }}>
+            <div
+              className="stack"
+              style={{ gap: 10 }}
+            >
+              {/* Replay Tour */}
               <div
                 style={{
                   padding: 12,
@@ -346,6 +246,7 @@ export function SettingsPage() {
                 </Button>
               </div>
 
+              {/* Clear Data */}
               <div
                 style={{
                   padding: 12,
@@ -385,6 +286,7 @@ export function SettingsPage() {
                 </Button>
               </div>
 
+              {/* Version / Dataset */}
               <div
                 className="row-between"
                 style={{ paddingTop: 5 }}
@@ -421,7 +323,8 @@ export function SettingsPage() {
               display: 'grid',
               placeItems: 'center',
               background: 'var(--surface-2)',
-              border: '1px solid var(--line-faint)',
+              border:
+                '1px solid var(--line-faint)',
               flexShrink: 0,
             }}
           >
@@ -430,13 +333,13 @@ export function SettingsPage() {
 
           <div>
             <b
-  style={{
-    fontSize: 13,
-    letterSpacing: '0.03em',
-  }}
->
-  ANVESHA application preferences
-</b>
+              style={{
+                fontSize: 13,
+                letterSpacing: '0.03em',
+              }}
+            >
+              ANVESHA application preferences
+            </b>
 
             <div
               className="tiny muted"
@@ -445,10 +348,11 @@ export function SettingsPage() {
                 lineHeight: 1.5,
               }}
             >
-              These settings control the ANVESHA interface,
-              detection filtering and local notification
-              preferences. Physical sonar hardware calibration
-              is not configured from this application.
+              These settings control the ANVESHA
+              interface, detection filtering and local
+              notification preferences. Physical sonar
+              hardware calibration is not configured from
+              this application.
             </div>
           </div>
         </div>

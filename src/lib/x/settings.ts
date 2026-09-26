@@ -40,7 +40,7 @@
   'set.dataCleared': "Data cleared",
   'set.ledgerEmptied': "Ledger emptied.",
   'set.datasetNote': "Model-backed data · external inference available",
-  'set.versionBadge': "OCEONIX v1.0",
+  'set.versionBadge': "ANVESHA v1.0",
 };
 
 export const xHi: Record<string, string> = {
@@ -85,7 +85,7 @@ export const xHi: Record<string, string> = {
   'set.dataCleared': "डेटा साफ़ हो गया",
   'set.ledgerEmptied': "बही-खाता खाली कर दिया गया।",
   'set.datasetNote': "मॉडल-आधारित डेटा · बाहरी inference उपलब्ध",
-  'set.versionBadge': "OCEONIX v1.0",
+  'set.versionBadge': "ANVESHA v1.0",
 };
 
 export const xMr: Record<string, string> = {
@@ -130,5 +130,5 @@ export const xMr: Record<string, string> = {
   'set.dataCleared': "डेटा साफ झाला",
   'set.ledgerEmptied': "खातेबही रिकामी केली.",
   'set.datasetNote': "मॉडेलवर आधारित डेटा · बाह्य inference उपलब्ध",
-  'set.versionBadge': "OCEONIX v1.0",
+  'set.versionBadge': "ANVESHA v1.0",
 };
