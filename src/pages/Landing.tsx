@@ -391,13 +391,40 @@ export function LandingPage() {
       </section>
 
       <footer className="ln-footer">
-        <div className="row" style={{ gap: 10 }}>
-          <OceMark size={30} />
-          <div>
-            <b style={{ color: 'var(--ink)', fontFamily: 'var(--font-display)' }}>OCEONIX</b>
-            <div className="tiny upper" style={{ color: 'var(--ink-3)' }}>{t('app.tagline')}</div>
-          </div>
-        </div>
+        <div
+  className="row"
+  style={{
+    gap: 12,
+    alignItems: 'center',
+  }}
+>
+  <img
+    src="/anvesha-logo.png"
+    alt="ANVESHA"
+    style={{
+      width: 52,
+      height: 52,
+      objectFit: 'contain',
+      display: 'block',
+    }}
+  />
+
+  <div>
+    <b
+      style={{
+        fontFamily: 'var(--font-display)',
+        fontSize: 18,
+        letterSpacing: '0.10em',
+      }}
+    >
+      ANVESHA
+    </b>
+
+    <div className="tiny upper muted">
+      {t('app.tagline')}
+    </div>
+  </div>
+</div>
         <div>
           <div className="tiny upper" style={{ color: 'var(--ink-3)', marginBottom: 8 }}>{t('lan.footerPlatform')}</div>
           <div className="stack" style={{ gap: 4 }}>

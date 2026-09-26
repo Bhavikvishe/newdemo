@@ -146,15 +146,50 @@ export function Shell({ route, children }: { route: string; children: ReactNode 
       {mobileOpen && <div className="sb-backdrop" onClick={() => setMobileOpen(false)} />}
       <aside className={`sidebar${mobileOpen ? ' open' : ''}`} aria-label={t('shl.navAria')}>
         <div className="sb-head">
-          <Link to="overview" className="sb-logo" onNavigate={() => setMobileOpen(false)}>
-            <span className="lg">
-              <OceMark size={34} />
-            </span>
-            <span>
-              <b>OCEONIX</b>
-              <span className="sub">{t('app.tagline')}</span>
-            </span>
-          </Link>
+          <Link
+  to="overview"
+  className="sb-logo"
+  onNavigate={() => setMobileOpen(false)}
+  aria-label="ANVESHA — Underwater Intelligence"
+>
+  <span
+    className="lg"
+    style={{
+      width: 42,
+      height: 42,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      flexShrink: 0,
+    }}
+  >
+    <img
+      src="/anvesha-logo.png"
+      alt="ANVESHA"
+      style={{
+        width: 42,
+        height: 42,
+        objectFit: 'contain',
+        display: 'block',
+      }}
+    />
+  </span>
+
+  <span style={{ minWidth: 0 }}>
+    <b
+      style={{
+        fontFamily: 'var(--font-display)',
+        letterSpacing: '0.08em',
+      }}
+    >
+      ANVESHA
+    </b>
+
+    <span className="sub">
+      {t('app.tagline')}
+    </span>
+  </span>
+</Link>
         </div>
 
         <nav className="sb-nav">

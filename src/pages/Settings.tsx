@@ -429,9 +429,14 @@ export function SettingsPage() {
           </div>
 
           <div>
-            <b style={{ fontSize: 13 }}>
-              OCEONIX application preferences
-            </b>
+            <b
+  style={{
+    fontSize: 13,
+    letterSpacing: '0.03em',
+  }}
+>
+  ANVESHA application preferences
+</b>
 
             <div
               className="tiny muted"
@@ -440,7 +445,7 @@ export function SettingsPage() {
                 lineHeight: 1.5,
               }}
             >
-              These settings control the OCEONIX interface,
+              These settings control the ANVESHA interface,
               detection filtering and local notification
               preferences. Physical sonar hardware calibration
               is not configured from this application.

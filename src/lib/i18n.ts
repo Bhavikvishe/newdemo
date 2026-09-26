@@ -5,7 +5,7 @@ export type Dict = Record<string, string>;
 const en: Dict = {
   // app
   'app.tagline': 'Underwater Intelligence',
-  'app.title': 'OCEONIX — Underwater Intelligence',
+  'app.title': 'ANVESHA — Underwater Intelligence',
   'app.sub': 'AI-Powered Marine Debris & Anomaly Detection',
 
   // nav
@@ -319,13 +319,13 @@ const en: Dict = {
   'set.systemalerts': 'System alerts',
 
   // onboarding
-  'ob.welcome.title': 'Welcome to Oceanix',
+  'ob.welcome.title': 'Welcome to ANVESHA',
   'ob.welcome.sub': 'Underwater Intelligence & Response Platform',
   'ob.welcome.desc': 'Your operational interface for detecting, analyzing, routing, and managing underwater marine anomalies.',
   'ob.start': 'Start Guided Tour',
   'ob.explore': 'Explore on My Own',
   'ob.complete.title': 'System Tour Complete',
-  'ob.complete.desc': 'You are ready to operate Oceanix.',
+  'ob.complete.desc': 'You are ready to operate ANVESHA.',
   'ob.dashboard': 'Launch Dashboard',
   'ob.detect': 'Explore Detection',
   'ob.mydept': 'Open My Department',
@@ -342,7 +342,7 @@ const en: Dict = {
   'ob.step.alerts': 'Alerts',
   'ob.step.alerts.desc': 'Detected objects become alerts based on risk and routing rules, with full lifecycle tracking.',
   'ob.step.routing': 'Department Routing',
-  'ob.step.routing.desc': 'OCEONIX routes each alert to the responsible department using configured object and risk rules.',
+  'ob.step.routing.desc': 'ANVESHA routes each alert to the responsible department using configured object and risk rules.',
   'ob.step.mydept': 'My Department',
   'ob.step.mydept.desc': 'View assigned alerts, acknowledge cases, assign operators, request verification and update status.',
   'ob.step.history': 'Detection History',
