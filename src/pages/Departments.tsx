@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useStore } from '../lib/store';
 import { makeT } from '../lib/i18n';
-import { DEPARTMENTS, OPERATORS } from '../lib/mock';
+import { DEPARTMENTS, OPERATORS, canonicalDepartmentId } from '../lib/mock';
 import { PageHead, Card, CardHead } from '../lib/ui';
 import { Link } from '../lib/router';
 import { IconUser, IconClock, IconScale } from '../components/Icons';
@@ -9,11 +9,8 @@ import type { DepartmentId } from '../types';
 
 const ROLE_KEYS: Record<string, string> = {
   'marine-operations': 'dpt.role.marineOps',
-  'marine-engineering': 'dpt.role.marineEng',
   'marine-environmental': 'dpt.role.marineEnv',
-  'search-rescue': 'dpt.role.searchRescue',
   'ocean-survey': 'dpt.role.oceanSurvey',
-  'recovery-response': 'dpt.role.recoveryResp',
   'system-admin': 'dpt.role.systemAdmin',
 };
 
@@ -37,7 +34,7 @@ export function DepartmentsPage() {
     const s = {} as Record<DepartmentId, { open: number; resolved: number; cases: number; crit: number }>;
     DEPARTMENTS.forEach((d) => { s[d.id] = { open: 0, resolved: 0, cases: 0, crit: 0 }; });
     alerts.forEach((a) => {
-      const d = a.detection.department;
+      const d = canonicalDepartmentId(a.detection.department);
       if (!s[d]) return;
       s[d].cases++;
       if (a.status === 'resolved') s[d].resolved++;
@@ -50,7 +47,8 @@ export function DepartmentsPage() {
   const detected = useMemo(() => {
     const m = {} as Record<DepartmentId, number>;
     detections.forEach((d) => {
-      m[d.department] = (m[d.department] ?? 0) + 1;
+      const dept = canonicalDepartmentId(d.department);
+      m[dept] = (m[dept] ?? 0) + 1;
     });
     return m;
   }, [detections]);
@@ -70,7 +68,7 @@ export function DepartmentsPage() {
           isAdmin && (
             <div className="row wrap" style={{ gap: 8 }}>
               <Link to="admin" className="btn btn-primary">
-                <IconScale size={15} /> Workload Balancer
+                <IconScale size={15} /> Adjust Workload
               </Link>
             </div>
           )

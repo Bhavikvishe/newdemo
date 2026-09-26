@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useStore } from '../lib/store';
 import { makeT } from '../lib/i18n';
-import { DEPARTMENTS, OPERATORS, deptById, fmtDT, remTime } from '../lib/mock';
+import { DEPARTMENTS, OPERATORS, canonicalDepartmentId, deptById, fmtDT, remTime } from '../lib/mock';
 import { alertStatusLabel, clsLabel, riskLabel, statusBadgeClass } from '../lib/labels';
 import { PageHead, Card, CardHead, Button, Select, RiskBadge, EmptyState } from '../lib/ui';
 import { Link } from '../lib/router';
@@ -12,11 +12,8 @@ const OPEN = ['new', 'unacknowledged', 'pending', 'assigned', 'in_progress', 'ma
 
 const OPERATIONAL_DEPTS: DepartmentId[] = [
   'marine-operations',
-  'marine-engineering',
   'marine-environmental',
-  'search-rescue',
   'ocean-survey',
-  'recovery-response',
 ];
 
 export function AdminPage() {
@@ -39,13 +36,13 @@ export function AdminPage() {
     return openAlerts.find((a) => a.alertId === taskId || a.id === taskId);
   }, [openAlerts, taskId]);
 
-  const isReassigning = selectedAlert && selectedAlert.detection.department !== dept;
+  const isReassigning = selectedAlert && canonicalDepartmentId(selectedAlert.detection.department) !== canonicalDepartmentId(dept);
 
   // Department Workloads Calculation
   const deptWorkloads = useMemo<DepartmentWorkloadInfo[]>(() => {
     return OPERATIONAL_DEPTS.map((dId) => {
       const d = deptById(dId);
-      const dAlerts = openAlerts.filter((a) => a.detection.department === dId);
+      const dAlerts = openAlerts.filter((a) => canonicalDepartmentId(a.detection.department) === dId);
       const inProg = dAlerts.filter((a) => a.status === 'in_progress').length;
       const crit = dAlerts.filter((a) => a.detection.riskLevel === 'critical').length;
       const od = dAlerts.filter((a) => a.status === 'overdue').length;
@@ -78,7 +75,7 @@ export function AdminPage() {
   // Target Department Roster
   const roster = useMemo(() => {
     const base = OPERATORS[dept] ?? [];
-    const reg = registeredUsers.filter((r) => r.department === dept).map((r) => r.name);
+    const reg = registeredUsers.filter((r) => canonicalDepartmentId(r.department) === canonicalDepartmentId(dept)).map((r) => r.name);
     const seen = new Set<string>();
     return [...base, ...reg].filter((n) => (seen.has(n) ? false : (seen.add(n), true)));
   }, [dept, registeredUsers]);
@@ -94,7 +91,7 @@ export function AdminPage() {
         selectedAlert.detection.department,
         dept,
         targetOp,
-        'Workload rebalancing'
+        'Manual workload adjustment'
       );
       setTaskId('');
       setOperator('');
@@ -107,23 +104,7 @@ export function AdminPage() {
     }
   };
 
-  // Quick 1-Click Auto-Balance
-  const handleAutoBalance = () => {
-    store.autoBalanceWorkload();
-  };
-
-  // Quick Row Transfer
-  const handleQuickTransfer = (alert: Alert, targetDept: DepartmentId) => {
-    if (alert.detection.department === targetDept) return;
-    const targetOp = OPERATORS[targetDept]?.[0] || 'Duty Specialist';
-    store.interdepartmentalTransfer(
-      alert.id,
-      alert.detection.department,
-      targetDept,
-      targetOp,
-      'Workload rebalancing'
-    );
-  };
+  // Manual workload adjustment is performed only from the explicit Adjust Workload controls.
 
   // Ledger Filter
   const filterLabels: Record<string, string> = {
@@ -150,16 +131,12 @@ export function AdminPage() {
       <PageHead
         kicker={`${t('nav.admin')} · system-admin`}
         title={t('nav.admin')}
-        sub="Operations command console: monitor fleet workloads, reassign tasks between departments, and assign operators."
+        sub="Operations command console: review department workloads and manually transfer open debris cases between operational departments."
         right={
           <div className="row wrap" style={{ gap: 8 }}>
-            <Button
-              variant="primary"
-              onClick={handleAutoBalance}
-              title="Automatically distribute tasks from busy departments to available units"
-            >
-              <IconScale size={14} /> ⚡ Auto-Balance Workloads
-            </Button>
+            <Link to="admin" className="btn btn-primary" title="Manually adjust workload by transferring an open case">
+              <IconScale size={14} /> Adjust Workload
+            </Link>
             <Link to="departments" className="btn btn-secondary">
               <IconHelm size={15} /> {t('nav.departments')}
             </Link>
@@ -233,7 +210,7 @@ export function AdminPage() {
       <Card style={{ marginTop: 16 }}>
         <CardHead
           kt="WORKLOAD MANAGEMENT & ASSIGNMENT"
-          title="Assign Specialist or Reassign Department"
+          title="Adjust Workload or Assign Specialist"
           right={
             <span className="tiny upper muted">
               <IconClock size={12} /> Live Command Authority
@@ -249,7 +226,7 @@ export function AdminPage() {
               setTaskId(id);
               const found = openAlerts.find((a) => a.alertId === id || a.id === id);
               if (found) {
-                setDept(found.detection.department);
+                setDept(canonicalDepartmentId(found.detection.department));
                 setOperator(found.assignedOperator ?? '');
               }
             }}
@@ -276,7 +253,7 @@ export function AdminPage() {
               setOperator('');
             }}
             options={DEPARTMENTS.filter((d) => d.id !== 'system-admin').map((d) => {
-              const count = openAlerts.filter((a) => a.detection.department === d.id).length;
+              const count = openAlerts.filter((a) => canonicalDepartmentId(a.detection.department) === d.id).length;
               return {
                 value: d.id,
                 label: `${d.shortName} (${count} active tasks)`,
@@ -304,7 +281,7 @@ export function AdminPage() {
           >
             {isReassigning ? (
               <>
-                <IconRescue size={15} /> ⚡ Transfer to {deptById(dept).shortName}
+                <IconRescue size={15} /> Adjust Workload → {deptById(dept).shortName}
               </>
             ) : (
               <>
@@ -367,7 +344,6 @@ export function AdminPage() {
                     key={a.id}
                     alert={a}
                     language={language}
-                    onReassign={(targetDept) => handleQuickTransfer(a, targetDept)}
                   />
                 ))}
               </div>
@@ -381,16 +357,6 @@ export function AdminPage() {
             <CardHead
               kt="FLEET CAPACITY & AID"
               title="Department Workloads"
-              right={
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleAutoBalance}
-                  style={{ fontSize: 11, padding: '2px 8px' }}
-                >
-                  ⚡ Auto-Balance
-                </Button>
-              }
             />
 
             <div className="stack" style={{ gap: 10 }}>
@@ -422,16 +388,6 @@ export function AdminPage() {
                         >
                           {dw.openTasks} {dw.openTasks === 1 ? 'task' : 'tasks'}
                         </span>
-                        {dw.openTasks > 0 && (
-                          <button
-                            className="btn btn-secondary"
-                            style={{ fontSize: 10.5, padding: '2px 6px', height: 22 }}
-                            onClick={() => store.autoBalanceWorkload(dw.departmentId)}
-                            title={`Reassign 1 task from ${dw.shortName} to relieve workload`}
-                          >
-                            Move 1 →
-                          </button>
-                        )}
                       </div>
                     </div>
 
@@ -509,11 +465,9 @@ export function AdminPage() {
 function TaskRow({
   alert,
   language,
-  onReassign,
 }: {
   alert: Alert;
   language: Language;
-  onReassign?: (targetDept: DepartmentId) => void;
 }) {
   const a = alert;
   const t = makeT(language);
@@ -551,25 +505,8 @@ function TaskRow({
         </div>
       </div>
 
-      {/* Row Actions: Quick Move Dropdown + Status + Open Button */}
+      {/* Row Actions: Status + Open Button */}
       <div className="row wrap" style={{ gap: 6, alignItems: 'center' }}>
-        {/* Quick Department Reassignment Dropdown */}
-        {onReassign && OPEN.includes(a.status) && (
-          <select
-            className="select"
-            style={{ fontSize: 11, padding: '3px 8px', height: 28, background: 'var(--ink-4)', borderRadius: 6 }}
-            value={a.detection.department}
-            onChange={(e) => onReassign(e.target.value as DepartmentId)}
-            title="Move this case to another department to relieve workload"
-          >
-            {OPERATIONAL_DEPTS.map((dId) => (
-              <option key={dId} value={dId}>
-                {dId === a.detection.department ? `Dept: ${deptById(dId).shortName}` : `Move → ${deptById(dId).shortName}`}
-              </option>
-            ))}
-          </select>
-        )}
-
         <span className={`badge ${statusBadgeClass(a.status)}`} style={{ fontSize: 10.5 }}>
           <span className="dot" /> {alertStatusLabel(a.status, language)}
         </span>

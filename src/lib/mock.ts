@@ -46,7 +46,7 @@ export const CLASS_META: Record<DetectionClass, ClassMeta> = {
     color: '#46c8f4',
     sonarTone: 150,
     primary: 'marine-operations',
-    escalation: 'recovery-response',
+    escalation: 'ocean-survey',
     hours: 72,
     equipment: ['Survey ROV', 'Magnetometer Array', 'Lifting Barge', 'Acoustic Marker'],
     removal: 'Controlled lift & tow to salvage yard',
@@ -60,8 +60,8 @@ export const CLASS_META: Record<DetectionClass, ClassMeta> = {
     category: 'infrastructure',
     color: '#ff9d45',
     sonarTone: 200,
-    primary: 'marine-engineering',
-    escalation: 'marine-operations',
+    primary: 'marine-operations',
+    escalation: 'marine-environmental',
     hours: 96,
     equipment: ['Pipe Inspection ROV', 'Hydrotest Kit', 'Flange Kit', 'Cutting Tool'],
     removal: 'Inspect integrity, re-bury or cut & cap segment',
@@ -76,7 +76,7 @@ export const CLASS_META: Record<DetectionClass, ClassMeta> = {
     color: '#3fd8c3',
     sonarTone: 120,
     primary: 'marine-environmental',
-    escalation: 'recovery-response',
+    escalation: 'ocean-survey',
     hours: 48,
     equipment: ['Net Recovery Rig', 'ROV Claw', 'Marker Buoy', 'Winch Line'],
     removal: 'Cut free & recover netting; log entangled fauna',
@@ -120,7 +120,7 @@ export const CLASS_META: Record<DetectionClass, ClassMeta> = {
     color: '#c79bff',
     sonarTone: 180,
     primary: 'marine-operations',
-    escalation: 'recovery-response',
+    escalation: 'ocean-survey',
     hours: 48,
     equipment: ['Deep Recovery ROV', 'Recovery Sling', 'Salvage Barge'],
     removal: 'Documentation, black-box recovery, staged lift',
@@ -134,7 +134,7 @@ export const CLASS_META: Record<DetectionClass, ClassMeta> = {
     category: 'safety',
     color: '#ff5b63',
     sonarTone: 210,
-    primary: 'search-rescue',
+    primary: 'marine-environmental',
     escalation: 'marine-operations',
     hours: 6,
     equipment: ['Dive Team', 'Rescue Skiff', 'Emergency Beacon', 'Med Kit'],
@@ -149,7 +149,7 @@ export const CLASS_META: Record<DetectionClass, ClassMeta> = {
     category: 'safety',
     color: '#ff3b30',
     sonarTone: 240,
-    primary: 'recovery-response',
+    primary: 'ocean-survey',
     escalation: 'marine-operations',
     hours: 12,
     equipment: ['EOD ROV', 'Acoustic Neutralizer', 'Safety Perimeter Buoy', 'Bomb Squad Kit'],
@@ -196,26 +196,42 @@ const U = (d: DepartmentId, name: string, short: string, _idLabel: string, color
     routingRules: [],
   }) as Department;
 
+const DEPARTMENT_ALIASES: Partial<Record<DepartmentId, DepartmentId>> = {
+  'marine-engineering': 'marine-operations',
+  'search-rescue': 'marine-environmental',
+  'recovery-response': 'ocean-survey',
+};
+
+export function canonicalDepartmentId(id: DepartmentId): DepartmentId {
+  return DEPARTMENT_ALIASES[id] ?? id;
+}
+
 export const DEPARTMENTS: Department[] = [
-  U('marine-operations', 'Marine Operations', 'MOP', 'MOP-01', '#46c8f4', 'online'),
-  U('marine-engineering', 'Marine Engineering', 'MEG', 'MEG-02', '#ff9d45', 'online'),
-  U('marine-environmental', 'Marine Environmental Operations', 'ENV', 'ENV-03', '#3fd8c3', 'busy'),
-  U('search-rescue', 'Search & Rescue / Safety', 'SAR', 'SAR-04', '#ff5b63', 'standby'),
-  U('ocean-survey', 'Ocean Survey & Monitoring', 'SRV', 'SRV-05', '#6aa6ff', 'standby'),
-  U('recovery-response', 'Recovery & Response Team', 'RRT', 'RRT-06', '#c79bff', 'online'),
+  U('marine-operations', 'Marine Operations & Engineering', 'MOP + MEG', 'MOP+MEG-01', '#46c8f4', 'online'),
+  U('marine-environmental', 'Environmental & Search / Rescue', 'ENV + SAR', 'ENV+SAR-02', '#3fd8c3', 'busy'),
+  U('ocean-survey', 'Survey, Recovery & Response', 'SRV + RRT', 'SRV+RRT-03', '#6aa6ff', 'standby'),
   U('system-admin', 'System Administrator', 'SYS', 'SYS-AD', '#e6e9ef', 'online'),
 ];
 
-export const deptById = (id: DepartmentId) => DEPARTMENTS.find((d) => d.id === id)!;
+export const deptById = (id: DepartmentId) => {
+  const canonical = canonicalDepartmentId(id);
+  const department = DEPARTMENTS.find((d) => d.id === canonical);
+  if (!department) throw new Error(`Unknown department: ${id}`);
+  return department;
+};
 export const deptColor = (id: DepartmentId) => deptById(id).color;
 
+const MOP_MEG_OPERATORS = ['A. Fernandes', 'R. Kadam', 'S. Iyer', 'N. Shaikh', 'V. Kulkarni', 'D. Nair', 'P. Joshi'];
+const ENV_SAR_OPERATORS = ['M. Patil', "L. D'Silva", 'T. Rao', 'K. Mehta', 'J. Quadros', 'S. Pawar'];
+const SRV_RRT_OPERATORS = ['G. Banerjee', 'H. Prakash', 'A. Varma', 'R. Gaikwad', 'B. Halder', 'C. Mascarenhas'];
+
 export const OPERATORS: Record<DepartmentId, string[]> = {
-  'marine-operations': ['A. Fernandes', 'R. Kadam', 'S. Iyer', 'N. Shaikh'],
-  'marine-engineering': ['V. Kulkarni', 'D. Nair', 'P. Joshi'],
-  'marine-environmental': ['M. Patil', "L. D'Silva", 'T. Rao'],
-  'search-rescue': ['K. Mehta', 'J. Quadros', 'S. Pawar'],
-  'ocean-survey': ['G. Banerjee', 'H. Prakash', 'A. Varma'],
-  'recovery-response': ['R. Gaikwad', 'B. Halder', 'C. Mascarenhas'],
+  'marine-operations': MOP_MEG_OPERATORS,
+  'marine-engineering': MOP_MEG_OPERATORS,
+  'marine-environmental': ENV_SAR_OPERATORS,
+  'search-rescue': ENV_SAR_OPERATORS,
+  'ocean-survey': SRV_RRT_OPERATORS,
+  'recovery-response': SRV_RRT_OPERATORS,
   'system-admin': ['SysAdmin'],
 };
 
@@ -1887,7 +1903,8 @@ export function buildRoutingRules(): RoutingRule[] {
 export function departmentWorkload(alerts: Alert[]): Record<DepartmentId, number> {
   const out = Object.fromEntries(DEPARTMENTS.map((d) => [d.id, 0])) as Record<DepartmentId, number>;
   alerts.forEach((a) => {
-    out[a.detection.department] += 1;
+    const department = canonicalDepartmentId(a.detection.department);
+    out[department] = (out[department] ?? 0) + 1;
   });
   return out;
 }
