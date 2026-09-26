@@ -2,16 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent } from 'react';
 import { useStore } from '../lib/store';
 import { makeT } from '../lib/i18n';
-import { CLASS_META, fmtCoordinate, fmtSize, fmtWeight, makeDetectionFromFile, pct } from '../lib/mock';
+import { CLASS_META, fmtCoordinate, fmtSize, fmtWeight, pct } from '../lib/mock';
 import type { DetectionReportSource } from '../lib/mock';
 import { fetchPredictions, mapClass, fileToDataUrl, setCachedImage } from '../lib/detect';
 import type { DetectDebugInfo, ModelPrediction } from '../lib/detect';
 import { WeatherReport } from '../components/Weather';
 import { categoryLabel, clsLabel } from '../lib/labels';
-import { renderFrame } from '../lib/sonar';
 import { PageHead, Card, CardHead, Button, RiskBadge, Tag, Kv, DetectionReportActions } from '../lib/ui';
 import { Link } from '../lib/router';
-import { IconCheck, IconUpload, IconScan, IconRefresh, IconDoc, IconAlert, IconInfo, IconShield } from '../components/Icons';
+import { IconCheck, IconUpload, IconScan, IconRefresh, IconDoc, IconAlert, IconInfo } from '../components/Icons';
 import type { Detection, DetectionClass } from '../types';
 
 const STAGES = ['det.stage1', 'det.stage2', 'det.stage3', 'det.stage4', 'det.stage5'];
@@ -35,7 +34,6 @@ export function DetectionPage() {
   const deptLabel = (id: string) => t(DEPT_KEYS[id] ?? id);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const [demoMode, setDemoMode] = useState(false);
   const [confThreshold, setConfThreshold] = useState(0.25);
   const [active, setActive] = useState(false);
   const [processingIdx, setProcessingIdx] = useState(-1);
@@ -90,19 +88,9 @@ export function DetectionPage() {
     });
   };
 
-  const toggleMode = () => {
-    const next = !demoMode;
-    setDemoMode(next);
-    store.updateSettings({ demoMode: next });
-    if (currentFile) {
-      run(currentFile, confThreshold, next);
-    }
-  };
-
-  const run = async (file: File, overrideConf?: number, overrideDemoMode?: boolean) => {
+  const run = async (file: File, overrideConf?: number) => {
     const runId = ++runIdRef.current;
     const activeConf = overrideConf ?? confThreshold;
-    const isDemo = overrideDemoMode !== undefined ? overrideDemoMode : demoMode;
 
     setCurrentFile(file);
     setActive(true);
@@ -124,23 +112,6 @@ export function DetectionPage() {
       setFrame(null);
     }
 
-    if (isDemo) {
-      // -------------------------------------------------------------
-      // DEMO MODE: explicitly simulated/synthetic detections for offline testing
-      // -------------------------------------------------------------
-      const base = makeDetectionFromFile(file);
-      base.isRealModel = false;
-      base.notes = `Simulated offline demo test (synthetic generation)`;
-      setResult(base);
-      if (!file.type.startsWith('image/')) {
-        setFrame(renderFrame(base, { width: 720 }, language));
-      }
-      return;
-    }
-
-    // -------------------------------------------------------------
-    // REAL MODEL MODE: Strictly use trained model (best.pt) output
-    // -------------------------------------------------------------
     try {
       const resp = await fetchPredictions(file, {
         conf: activeConf,
@@ -329,20 +300,9 @@ export function DetectionPage() {
       <PageHead
         kicker={t('det.title')}
         title={t('nav.detection')}
-        sub={demoMode ? 'Demo Mode (Simulated Mock Detections)' : 'Real AI Model Inference (best.pt) · 6 Classes'}
+        sub="Real AI Model Inference (best.pt) · 6 Classes"
         right={
           <div className="row" style={{ gap: 10, alignItems: 'center' }}>
-            {/* Mode Switcher */}
-            <button
-              onClick={toggleMode}
-              className={`btn btn-sm ${demoMode ? 'btn-secondary' : 'btn-primary'}`}
-              title="Toggle between Real AI Model inference and Simulated Demo Mode"
-              style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-            >
-              <IconShield size={14} />
-              <span>{demoMode ? '⚠️ Switch to Real AI Model' : '✓ Real Model (best.pt)'}</span>
-            </button>
-
             {/* Threshold Selector */}
             <div className="row" style={{ alignItems: 'center', gap: 6, fontSize: 12.5 }}>
               <span className="muted">Conf:</span>
@@ -367,39 +327,6 @@ export function DetectionPage() {
         }
       />
 
-      {demoMode && (
-        <div
-          style={{
-            background: 'rgba(234, 179, 8, 0.12)',
-            border: '1px solid rgba(234, 179, 8, 0.4)',
-            borderRadius: 8,
-            padding: '12px 18px',
-            marginBottom: 16,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: 12,
-            color: '#fef08a',
-            fontSize: 13,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <IconAlert size={20} />
-            <div>
-              <strong style={{ display: 'block', marginBottom: 2 }}>Simulation Mode Active (Mock Data)</strong>
-              <span>Detections in this mode are randomly generated synthetic simulations for offline UI testing and do <em>not</em> reflect inferences from the trained <code>best.pt</code> model.</span>
-            </div>
-          </div>
-          <button
-            onClick={toggleMode}
-            className="btn btn-sm btn-primary"
-            style={{ whiteSpace: 'nowrap' }}
-          >
-            Switch to Real AI Model (best.pt)
-          </button>
-        </div>
-      )}
-
       <div className="grid cols-12" style={{ gap: 16 }}>
         {/* Left Column: Dropzone / Sonar Preview & Pipeline */}
         <div className="span-5">
@@ -416,7 +343,7 @@ export function DetectionPage() {
                 <IconUpload size={28} />
                 <b>{t('det.drop')}</b>
                 <span className="muted" style={{ fontSize: 12.5 }}>
-                  {demoMode ? 'Demo Mode Active — Simulated Pipeline' : 'Real Model Inference (best.pt) · 6 Classes'}
+                  Real Model Inference (best.pt) · 6 Classes
                 </span>
                 <span className="tiny upper muted" style={{ marginTop: 4 }}>
                   Threshold: {confThreshold.toFixed(2)} · .jpg · .png · .tif · .xtf
@@ -437,7 +364,7 @@ export function DetectionPage() {
           ) : (
             <Card solid className="h-full" style={{ padding: 18 }}>
               <CardHead
-                kt={demoMode ? 'SIMULATED DEMO (MOCK)' : 'ULTRALYTICS YOLO INFERENCE'}
+                kt="ULTRALYTICS YOLO INFERENCE"
                 title={
                   error
                     ? 'Inference Error'
@@ -449,8 +376,8 @@ export function DetectionPage() {
                 }
                 right={
                   done ? (
-                    <Tag kind={error ? 'ver' : demoMode ? 'rule' : 'ai'}>
-                      {error ? 'Failed' : demoMode ? 'Simulated Demo' : 'Real Model (best.pt)'}
+                    <Tag kind={error ? 'ver' : 'ai'}>
+                      {error ? 'Failed' : 'Real Model (best.pt)'}
                     </Tag>
                   ) : (
                     <span className="spinner" style={{ width: 16, height: 16 }} />
