@@ -29,7 +29,7 @@ const SAMPLE_TARGETS: Detection[] = [
     recommendedEquipment: ['Side-scan Sonar', 'ROV Grabber'],
     removalMethod: 'In-situ historical survey and salvage marking',
     verificationStatus: 'verified',
-    notes: 'Historic merchant shipwreck lying at 17.5m GEBCO bathymetric depth on shelf sediment.',
+    notes: 'Reference demo target; bathymetry is queried dynamically for the selected coordinate.',
     detectionTime: new Date().toISOString(),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -58,7 +58,7 @@ const SAMPLE_TARGETS: Detection[] = [
     recommendedEquipment: ['Multibeam Echo Sounder', 'Heavy Lift Crane'],
     removalMethod: 'Deepwater recovery sling',
     verificationStatus: 'verified',
-    notes: 'Submerged airframe resting upright on seafloor slope at 32m GEBCO bathymetric depth.',
+    notes: 'Reference demo target; bathymetry is queried dynamically for the selected coordinate.',
     detectionTime: new Date().toISOString(),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -87,7 +87,7 @@ const SAMPLE_TARGETS: Detection[] = [
     recommendedEquipment: ['Sub-bottom Profiler', 'Crawler ROV'],
     removalMethod: 'Structural inspection & cathodic anode replacement',
     verificationStatus: 'verified',
-    notes: 'Exposed subsea trunk line crossing trench depression at 52m GEBCO bathymetric depth.',
+    notes: 'Reference demo target; bathymetry is queried dynamically for the selected coordinate.',
     detectionTime: new Date().toISOString(),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
@@ -143,7 +143,7 @@ export function DepthAnalysisPage() {
   // Hovered transect point for interactive inspection
   const [hoveredPointIndex, setHoveredPointIndex] = useState<number | null>(null);
 
-  // GEBCO API State
+  // Bathymetry API state
   const [loading, setLoading] = useState(false);
   const [gebcoData, setGebcoData] = useState<GebcoDepthResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -156,7 +156,7 @@ export function DepthAnalysisPage() {
     ? parseFloat(manualLng) || 72.695
     : selectedDet?.gps?.longitude ?? 72.695;
 
-  // Load GEBCO bathymetry whenever active coordinate or span changes
+  // Load bathymetry whenever active coordinate or span changes
   useEffect(() => {
     let active = true;
     const ctrl = new AbortController();
@@ -173,7 +173,7 @@ export function DepthAnalysisPage() {
       })
       .catch((err) => {
         if (active && err.name !== 'AbortError') {
-          setError(err.message || 'Failed to fetch GEBCO bathymetry');
+          setError(err.message || 'Failed to fetch bathymetry data');
           setLoading(false);
         }
       });
@@ -271,7 +271,10 @@ export function DepthAnalysisPage() {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `gebco-bathymetry-${activeLat.toFixed(4)}-${activeLng.toFixed(4)}.csv`);
+    link.setAttribute(
+      'download',
+      `${gebcoData.provenance.is_live ? 'gebco' : 'synthetic-bathymetry'}-${activeLat.toFixed(4)}-${activeLng.toFixed(4)}.csv`,
+    );
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -280,7 +283,7 @@ export function DepthAnalysisPage() {
   return (
     <div className="depth-analysis-page stack" style={{ gap: 20 }}>
       <PageHead
-        kicker="GEBCO BATHYMETRIC INTELLIGENCE · 15 ARC-SECOND GLOBAL GRID"
+        kicker="BATHYMETRIC INTELLIGENCE · 15 ARC-SECOND GLOBAL GRID"
         title={t('nav.depth')}
         sub="High-resolution seafloor elevation and acoustic bathymetry profiling for analyzed detections"
         right={
@@ -303,11 +306,13 @@ export function DepthAnalysisPage() {
                   width: 8,
                   height: 8,
                   borderRadius: '50%',
-                  background: gebcoData?.api_connected ? 'var(--teal)' : 'var(--accent)',
+                  background: gebcoData?.provenance.is_live ? 'var(--teal)' : 'var(--accent)',
                   boxShadow: '0 0 8px currentColor',
                 }}
               />
-              {gebcoData?.api_connected ? 'GEBCO 2020 CONNECTED (KEYLESS)' : 'GEBCO BATHYMETRIC MODEL ACTIVE'}
+              {gebcoData?.provenance.is_live
+                ? 'LIVE GEBCO BATHYMETRY'
+                : 'SYNTHETIC FALLBACK — NOT GEBCO'}
             </span>
 
             <Button variant="secondary" onClick={exportCsv} disabled={!gebcoData}>
@@ -329,6 +334,77 @@ export function DepthAnalysisPage() {
           }}
         >
           {error}
+        </div>
+      )}
+
+      {gebcoData && (
+        <div
+          style={{
+            padding: '11px 14px',
+            borderRadius: 8,
+            background: gebcoData.provenance.is_live
+              ? 'rgba(0, 220, 170, 0.08)'
+              : 'rgba(255, 170, 0, 0.10)',
+            border: `1px solid ${
+              gebcoData.provenance.is_live
+                ? 'rgba(0, 220, 170, 0.30)'
+                : 'rgba(255, 170, 0, 0.35)'
+            }`,
+          }}
+        >
+          <div
+            className="row-between wrap"
+            style={{ gap: 10, alignItems: 'center' }}
+          >
+            <div>
+              <div
+                className="tiny upper"
+                style={{
+                  color: gebcoData.provenance.is_live
+                    ? 'var(--teal)'
+                    : 'var(--accent)',
+                  fontWeight: 800,
+                }}
+              >
+                {gebcoData.provenance.is_live
+                  ? 'LIVE DATA PROVENANCE'
+                  : 'SYNTHETIC DATA PROVENANCE'}
+              </div>
+              <div
+                className="tiny muted"
+                style={{ marginTop: 3, lineHeight: 1.45 }}
+              >
+                Source: {gebcoData.provenance.source_name}
+                {' · '}
+                Dataset: {gebcoData.dataset}
+                {' · '}
+                {gebcoData.provenance.is_live
+                  ? gebcoData.resolution
+                  : 'No live GEBCO sounding was used for this result.'}
+              </div>
+            </div>
+            {!gebcoData.provenance.is_live && (
+              <span
+                className="badge b-plain"
+                style={{ fontWeight: 800 }}
+              >
+                ESTIMATE ONLY
+              </span>
+            )}
+          </div>
+
+          {gebcoData.provenance.warning && (
+            <div
+              className="tiny"
+              style={{
+                marginTop: 7,
+                color: 'var(--ink-2)',
+                lineHeight: 1.45,
+              }}
+            >
+              {gebcoData.provenance.warning}
+            </div>
+          )}
         </div>
       )}
 
@@ -501,7 +577,7 @@ export function DepthAnalysisPage() {
           <Card>
             <CardHead
               kt="BATHYMETRIC TRANSECT PROFILE"
-              title="Seafloor Elevation & Object Placement (GEBCO 2020)"
+              title="Seafloor Elevation & Object Placement"
               right={
                 <div className="row" style={{ gap: 10, alignItems: 'center' }}>
                   <span className="mono tiny muted">
@@ -763,7 +839,9 @@ export function DepthAnalysisPage() {
               }}
             >
               <div>
-                <span className="tiny upper muted">Point Depth (GEBCO)</span>
+                <span className="tiny upper muted">
+                  Point Depth ({gebcoData?.provenance.is_live ? 'GEBCO' : 'Synthetic'})
+                </span>
                 <div className="mono" style={{ fontSize: 18, fontWeight: 700, color: 'var(--accent)' }}>
                   -{currentDepth.toFixed(1)} m <span style={{ fontSize: 12, color: 'var(--ink-2)' }}>({(currentDepth * 3.28084).toFixed(1)} ft)</span>
                 </div>
@@ -867,7 +945,10 @@ export function DepthAnalysisPage() {
               {/* Legend & Grid Context */}
               <div className="span-5 stack" style={{ gap: 12 }}>
                 <p className="tiny muted" style={{ lineHeight: 1.5, margin: 0 }}>
-                  The 2D spatial relief grid samples GEBCO elevation soundings around the target coordinate within a <b>{spanKm} km</b> radius, modeling seabed slope and potential hazards for navigation and ROV approach.
+                  The 2D spatial relief grid samples the active bathymetry source around the target coordinate within a <b>{spanKm} km</b> radius, modeling seabed slope and potential hazards for navigation and ROV approach.{' '}
+                  {gebcoData?.provenance.is_live
+                    ? 'Live GEBCO elevation data is being used.'
+                    : 'Because the live source is unavailable, these values are synthetic estimates and are not GEBCO measurements.'}
                 </p>
 
                 <div className="stack" style={{ gap: 6 }}>
@@ -982,9 +1063,35 @@ export function DepthAnalysisPage() {
           {/* Oceanographic & Seawater Physics Telemetry */}
           <Card>
             <CardHead
-              kt="SEAWATER ACOUSTICS & PHYSICS"
-              title="Oceanographic Properties"
+              kt="DEPTH-DERIVED SEAWATER ESTIMATES"
+              title="Derived Oceanographic Properties"
             />
+
+            <div
+              style={{
+                padding: '9px 11px',
+                borderRadius: 8,
+                background: 'rgba(255, 170, 0, 0.08)',
+                border: '1px solid rgba(255, 170, 0, 0.25)',
+              }}
+            >
+              <div
+                className="tiny upper"
+                style={{ color: 'var(--accent)', fontWeight: 800 }}
+              >
+                DERIVED ESTIMATES — NOT DIRECT MEASUREMENTS
+              </div>
+              <div
+                className="tiny muted"
+                style={{ marginTop: 4, lineHeight: 1.45 }}
+              >
+                Temperature, sound speed, pressure, light penetration, and
+                operational classification are calculated from the queried
+                bathymetric depth in the current implementation. They are not
+                direct sensor readings or independent oceanographic dataset
+                measurements.
+              </div>
+            </div>
 
             <div className="stack" style={{ gap: 12 }}>
               {/* Depth Zone Banner */}
@@ -1004,11 +1111,23 @@ export function DepthAnalysisPage() {
                 </p>
               </div>
 
-              {/* Acoustic Sound Speed (UNESCO) */}
+              {/* Estimated water temperature */}
               <div className="row-between" style={{ padding: '8px 0', borderBottom: '1px solid var(--line-faint)' }}>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>Sound Speed in Seawater</div>
-                  <div className="tiny muted">UNESCO Acoustic Propagation</div>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>Estimated Water Temperature</div>
+                  <div className="tiny muted">Depth-derived estimate</div>
+                </div>
+                <div className="mono" style={{ textAlign: 'right', fontWeight: 600, fontSize: 14 }}>
+                  {gebcoData?.oceanography.estimated_water_temp_c ?? 22.6} °C
+                </div>
+              </div>
+
+              {/* Estimated Acoustic Sound Speed */}
+
+              <div className="row-between" style={{ padding: '8px 0', borderBottom: '1px solid var(--line-faint)' }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>Estimated Sound Speed</div>
+                  <div className="tiny muted">Depth-derived acoustic estimate</div>
                 </div>
                 <div className="mono" style={{ textAlign: 'right', color: 'var(--accent)', fontWeight: 700, fontSize: 15 }}>
                   {gebcoData?.oceanography.sound_speed_mps ?? 1528.4} m/s
@@ -1019,7 +1138,7 @@ export function DepthAnalysisPage() {
               <div className="row-between" style={{ padding: '8px 0', borderBottom: '1px solid var(--line-faint)' }}>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 600 }}>Hydrostatic Pressure</div>
-                  <div className="tiny muted">Ambient pressure at seabed</div>
+                  <div className="tiny muted">Depth-derived ambient pressure</div>
                 </div>
                 <div className="mono" style={{ textAlign: 'right', fontWeight: 600, fontSize: 14 }}>
                   {gebcoData?.oceanography.hydrostatic_pressure_bar ?? 4.8} bar
@@ -1030,8 +1149,8 @@ export function DepthAnalysisPage() {
               {/* Light Penetration */}
               <div className="row-between" style={{ padding: '8px 0', borderBottom: '1px solid var(--line-faint)' }}>
                 <div>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>Ambient Light Level</div>
-                  <div className="tiny muted">Optical solar attenuation</div>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>Estimated Light Penetration</div>
+                  <div className="tiny muted">Depth-derived optical estimate</div>
                 </div>
                 <div className="mono" style={{ textAlign: 'right', fontWeight: 600, fontSize: 14 }}>
                   {gebcoData?.oceanography.light_penetration_pct ?? 18.2}%
@@ -1042,7 +1161,7 @@ export function DepthAnalysisPage() {
               <div className="row-between" style={{ padding: '8px 0' }}>
                 <div>
                   <div style={{ fontSize: 13, fontWeight: 600 }}>Operational Capability</div>
-                  <div className="tiny muted">Dive / Recovery classification</div>
+                  <div className="tiny muted">Depth-based heuristic classification</div>
                 </div>
                 <div style={{ textAlign: 'right' }}>
                   <span className="badge b-plain" style={{ fontWeight: 600 }}>
