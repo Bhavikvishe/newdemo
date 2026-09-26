@@ -1,15 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../lib/store';
 import { makeT } from '../lib/i18n';
-import { PageHead, Card, CardHead, Button, RiskBadge, ClassBadge, Badge, Modal, ModalHead } from '../lib/ui';
-import { IconDepth, IconDoc, IconRadar, IconUpload, IconPin, IconCheck } from '../components/Icons';
-import { getCachedImage, setCachedImage, fetchPredictions, fileToDataUrl, mapClass } from '../lib/detect';
+import { PageHead, Card, CardHead, Button, RiskBadge, ClassBadge, Badge } from '../lib/ui';
+import { IconDepth, IconDoc, IconRadar, IconPin } from '../components/Icons';
+import { getCachedImage } from '../lib/detect';
 import { renderFrame } from '../lib/sonar';
 import { fetchGebcoDepth } from '../lib/gebco';
 import type { GebcoDepthResponse } from '../lib/gebco';
 import { clsLabel } from '../lib/labels';
-import { fmtDT, CLASS_META } from '../lib/mock';
-import type { Detection, DetectionClass } from '../types';
+import { fmtDT } from '../lib/mock';
+import type { Detection } from '../types';
 
 const SAMPLE_TARGETS: Detection[] = [
   {
@@ -124,6 +124,14 @@ export function DepthAnalysisPage() {
   // Selected detection for depth analysis
   const [selectedDet, setSelectedDet] = useState<Detection>(allTargets[0]);
 
+  // Keep the selected target aligned with the available analyzed detections.
+  useEffect(() => {
+    if (!selectedDet || !allTargets.some((det) => det.id === selectedDet.id)) {
+      setSelectedDet(allTargets[0]);
+    }
+  }, [allTargets, selectedDet]);
+
+
   // Custom manual coordinates mode
   const [isManualGps, setIsManualGps] = useState(false);
   const [manualLat, setManualLat] = useState('18.90500');
@@ -139,15 +147,6 @@ export function DepthAnalysisPage() {
   const [loading, setLoading] = useState(false);
   const [gebcoData, setGebcoData] = useState<GebcoDepthResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-
-  // API Key info modal
-  const [showApiKeyModal, setShowApiKeyModal] = useState(false);
-  const [customApiKey, setCustomApiKey] = useState(localStorage.getItem('oceonix_gebco_api_key') || '');
-  const [keySavedToast, setKeySavedToast] = useState(false);
-
-  // Direct upload state
-  const [isUploading, setIsUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Active target coordinates
   const activeLat = isManualGps
@@ -184,123 +183,6 @@ export function DepthAnalysisPage() {
       ctrl.abort();
     };
   }, [activeLat, activeLng, spanKm]);
-
-  // Handle direct file upload right on Depth Analysis page
-  const handleFileUpload = async (file: File) => {
-    if (!file || !file.type.startsWith('image/')) return;
-    setIsUploading(true);
-
-    try {
-      const dataUrl = await fileToDataUrl(file);
-      const detId = `REAL-DEPTH-${Date.now()}`;
-      if (dataUrl) {
-        setCachedImage(detId, dataUrl);
-        setCachedImage(file.name, dataUrl);
-      }
-
-      // Query real model and read GPS from the uploaded image EXIF metadata
-      let preds: any[] = [];
-      let modelGps: Detection['gps'] | undefined;
-
-      try {
-        const resp = await fetchPredictions(file, {
-          conf: 0.2,
-          debug: true,
-        });
-
-        preds = resp.predictions || [];
-
-        if (resp.gps) {
-          modelGps = {
-            latitude: resp.gps.latitude,
-            longitude: resp.gps.longitude,
-            accuracy: resp.gps.accuracy,
-            timestamp: resp.gps.timestamp,
-            source: resp.gps.source ?? 'unknown',
-          };
-        }
-      } catch {
-        /* fallback to default detection */
-      }
-
-      const p = preds[0] || {
-        label: 'shipwreck',
-        confidence: 0.92,
-        bbox: { x: 0.35, y: 0.35, width: 0.3, height: 0.25 },
-      };
-
-      const mappedClass: DetectionClass = mapClass(p.label) ?? 'shipwreck';
-      const meta = CLASS_META[mappedClass];
-
-      const newDet: Detection = {
-        id: detId,
-        imageId: file.name,
-        imageUrl: dataUrl,
-        className: mappedClass,
-        confidence: p.confidence,
-        boundingBox: { ...p.bbox, normalized: true },
-        predictions: preds.map((pr: any) => ({
-          class_id: pr.class_id,
-          label: pr.label,
-          confidence: pr.confidence,
-          bbox: { ...pr.bbox, normalized: true },
-        })),
-        // Use GPS extracted from the original image EXIF metadata.
-        // Never derive GPS from the YOLO bounding box or Math.random().
-        gps: modelGps ?? {
-          latitude: 18.905,
-          longitude: 72.695,
-          accuracy: undefined,
-          timestamp: new Date().toISOString(),
-          source: 'fallback',
-        },
-        estimatedSize: {
-          length: +(p.bbox.width * 26).toFixed(1),
-          width: +(p.bbox.height * 12).toFixed(1),
-          height: +(p.bbox.height * 5.5).toFixed(1),
-          unit: 'm',
-        },
-        estimatedWeight: {
-          min: Math.round(p.bbox.width * 1200),
-          max: Math.round(p.bbox.width * 3000),
-          unit: 'kg',
-          confidence: p.confidence,
-        },
-        riskLevel: meta ? meta.riskBase : 'high',
-        riskScore: meta?.riskBase === 'critical' ? 95 : 75,
-        priority: 1,
-        responseDeadline: new Date(Date.now() + 36 * 3600e3).toISOString(),
-        department: meta ? meta.primary : 'marine-operations',
-        recommendedEquipment: meta ? meta.equipment : ['Survey ROV'],
-        removalMethod: 'Standard ocean survey & depth profiling',
-        verificationStatus: 'verified',
-        notes: `Analyzed via best.pt at ${file.name} for GEBCO bathymetry.`,
-        detectionTime: new Date().toISOString(),
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        aiPrediction: true,
-        estimated: true,
-        recommended: true,
-        manualVerificationRequired: p.confidence < 0.5,
-        source: 'upload',
-        isRealModel: true,
-        rawLabel: p.label,
-      };
-
-      store.recordDetection(newDet, { silent: true });
-      setSelectedDet(newDet);
-      setIsManualGps(false);
-      store.addToast({
-        kind: 'success',
-        title: 'Image Analyzed & Depth Queried',
-        text: `${file.name} analyzed. Seafloor bathymetry updated with GEBCO data.`,
-      });
-    } catch (err: any) {
-      store.addToast({ kind: 'critical', title: 'Upload Failed', text: err?.message || 'Failed to process file' });
-    } finally {
-      setIsUploading(false);
-    }
-  };
 
   // Image source for currently selected detection
   const selectedImage = useMemo(() => {
@@ -395,27 +277,8 @@ export function DepthAnalysisPage() {
     document.body.removeChild(link);
   };
 
-  const saveCustomApiKey = () => {
-    localStorage.setItem('oceonix_gebco_api_key', customApiKey.trim());
-    setKeySavedToast(true);
-    setTimeout(() => setKeySavedToast(false), 3000);
-  };
-
   return (
     <div className="depth-analysis-page stack" style={{ gap: 20 }}>
-      {/* Hidden file input for direct sonar image upload */}
-      <input
-        type="file"
-        ref={fileInputRef}
-        style={{ display: 'none' }}
-        accept="image/*"
-        onChange={(e) => {
-          if (e.target.files && e.target.files[0]) {
-            handleFileUpload(e.target.files[0]);
-          }
-        }}
-      />
-
       <PageHead
         kicker="GEBCO BATHYMETRIC INTELLIGENCE · 15 ARC-SECOND GLOBAL GRID"
         title={t('nav.depth')}
@@ -447,16 +310,6 @@ export function DepthAnalysisPage() {
               {gebcoData?.api_connected ? 'GEBCO 2020 CONNECTED (KEYLESS)' : 'GEBCO BATHYMETRIC MODEL ACTIVE'}
             </span>
 
-            {/* API Key Info Button */}
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setShowApiKeyModal(true)}
-              title="GEBCO API details & key settings"
-            >
-              API Key Info
-            </Button>
-
             <Button variant="secondary" onClick={exportCsv} disabled={!gebcoData}>
               <IconDoc size={14} /> Export CSV
             </Button>
@@ -487,19 +340,11 @@ export function DepthAnalysisPage() {
             <div>
               <b style={{ fontSize: 14, color: 'var(--ink)' }}>Target Undersea Image For Depth Analysis</b>
               <p className="tiny muted" style={{ margin: 0 }}>
-                Select an analyzed target or upload a new sonar image to inspect seafloor depth
+                Select an analyzed target to inspect seafloor depth
               </p>
             </div>
           </div>
           <div className="row wrap" style={{ gap: 8 }}>
-            <Button
-              size="sm"
-              variant="primary"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isUploading}
-            >
-              <IconUpload size={13} /> {isUploading ? 'Analyzing...' : 'Upload Sonar Image'}
-            </Button>
             <Button
               size="sm"
               variant={!isManualGps ? 'secondary' : 'outline'}
@@ -1210,62 +1055,6 @@ export function DepthAnalysisPage() {
         </div>
       </div>
 
-      {/* API Key Modal */}
-      {showApiKeyModal && (
-        <Modal onClose={() => setShowApiKeyModal(false)} width={520}>
-          <div style={{ padding: '22px 26px' }}>
-            <ModalHead
-              kt="GEBCO CONFIGURATION"
-              title="API Key & Bathymetry Access"
-              onClose={() => setShowApiKeyModal(false)}
-            />
-            <div className="stack" style={{ gap: 14 }}>
-              <div
-                style={{
-                  padding: 12,
-                  borderRadius: 8,
-                  background: 'rgba(0, 240, 255, 0.08)',
-                  border: '1px solid var(--accent)',
-                  fontSize: 13,
-                  lineHeight: 1.5,
-                }}
-              >
-                <b style={{ color: 'var(--accent)' }}>No API Key Required!</b>
-                <p style={{ margin: '6px 0 0', color: 'var(--ink-2)' }}>
-                  GEBCO 2020 bathymetric elevation data is served free and openly by the International Hydrographic Organization (IHO) and UNESCO-IOC. Queries are routed through your local backend proxy (<code>/api/gebco/depth</code>) to prevent browser CORS blocks.
-                </p>
-              </div>
-
-              <div>
-                <label className="tiny upper muted" style={{ display: 'block', marginBottom: 6 }}>
-                  Optional OpenTopography Enterprise API Key
-                </label>
-                <div className="row" style={{ gap: 8 }}>
-                  <input
-                    className="input mono"
-                    placeholder="Optional (e.g. ot_xxxxxxxxxxxx)"
-                    value={customApiKey}
-                    onChange={(e) => setCustomApiKey(e.target.value)}
-                    style={{ flex: 1 }}
-                  />
-                  <Button variant="secondary" onClick={saveCustomApiKey}>
-                    {keySavedToast ? <IconCheck size={14} /> : 'Save'}
-                  </Button>
-                </div>
-                <span className="tiny muted" style={{ display: 'block', marginTop: 4 }}>
-                  Only required if you exceed 10,000 queries/day or use a private corporate GEBCO mirror.
-                </span>
-              </div>
-
-              <div className="row" style={{ justifyContent: 'flex-end', marginTop: 10 }}>
-                <Button variant="primary" onClick={() => setShowApiKeyModal(false)}>
-                  Done
-                </Button>
-              </div>
-            </div>
-          </div>
-        </Modal>
-      )}
     </div>
   );
 }
