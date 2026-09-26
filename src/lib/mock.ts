@@ -17,6 +17,7 @@ import type {
 import { jsPDF } from 'jspdf';
 import type { ModelPrediction } from './detect';
 import { makeT } from './i18n';
+import { fetchGebcoDepth, type GebcoDepthResponse } from './gebco';
 
 export type Category = 'debris' | 'anomaly' | 'marine-life' | 'infrastructure' | 'safety';
 
@@ -634,6 +635,13 @@ export interface ReportPdfData {
   findings: string[];
   columns: string[];
   rows: Record<string, string>[];
+  secondaryColumns?: string[];
+  secondaryRows?: Record<string, string>[];
+  secondaryLabel?: string;
+  tertiaryColumns?: string[];
+  tertiaryRows?: Record<string, string>[];
+  tertiaryLabel?: string;
+  orientation?: 'portrait' | 'landscape';
   labels: {
     keyMetrics: string;
     findings: string;
@@ -642,15 +650,21 @@ export interface ReportPdfData {
 }
 
 export interface BatchReportItem {
+  id?: string;
   filename: string;
   path?: string;
   status: string;
   predictions: ModelPrediction[];
   error?: string;
+  gps?: GPSPosition;
 }
 
 export function downloadReportPDF(data: ReportPdfData) {
-  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+  const doc = new jsPDF({
+    orientation: data.orientation ?? 'portrait',
+    unit: 'mm',
+    format: 'a4',
+  });
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 14;
@@ -768,63 +782,206 @@ export function downloadReportPDF(data: ReportPdfData) {
     y += 4;
   };
 
-  const drawTable = () => {
-    if (!data.columns.length) return;
+  const drawTable = (
+    columns: string[] = data.columns,
+    rows: Record<string, string>[] = data.rows,
+  ) => {
+    if (!columns.length) return;
+
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8.5);
-    const rawWidths = data.columns.map((column) => {
+
+    const rawWidths = columns.map((column) => {
       let width = doc.getTextWidth(column) + 7;
-      data.rows.forEach((row) => {
-        width = Math.max(width, doc.getTextWidth(row[column] ?? '') + 7);
+      rows.forEach((row) => {
+        width = Math.max(
+          width,
+          doc.getTextWidth(row[column] ?? '') + 7,
+        );
       });
       return Math.max(18, width);
     });
-    const totalWidth = rawWidths.reduce((sum, width) => sum + width, 0);
-    const widths = rawWidths.map((width) => (width / totalWidth) * contentWidth);
+
+    const totalWidth = rawWidths.reduce(
+      (sum, width) => sum + width,
+      0,
+    );
+
+    const widths = rawWidths.map(
+      (width) =>
+        (width / totalWidth) * contentWidth,
+    );
 
     const drawHeader = () => {
-      const cellLines = data.columns.map((column, index) => wrap(column, widths[index] - 6));
-      const rowHeight = Math.max(7, Math.max(...cellLines.map((lines) => lines.length)) * lineHeight + 5);
+      const cellLines = columns.map(
+        (column, index) =>
+          wrap(
+            column,
+            widths[index] - 6,
+          ),
+      );
+
+      const rowHeight = Math.max(
+        7,
+        Math.max(
+          ...cellLines.map(
+            (lines) => lines.length,
+          ),
+        ) *
+          lineHeight +
+          5,
+      );
+
       ensureSpace(rowHeight);
-      doc.setFillColor(headerFill[0], headerFill[1], headerFill[2]);
-      doc.rect(margin, y, contentWidth, rowHeight, 'F');
-      doc.setDrawColor(border[0], border[1], border[2]);
-      doc.rect(margin, y, contentWidth, rowHeight, 'S');
+
+      doc.setFillColor(
+        headerFill[0],
+        headerFill[1],
+        headerFill[2],
+      );
+      doc.rect(
+        margin,
+        y,
+        contentWidth,
+        rowHeight,
+        'F',
+      );
+
+      doc.setDrawColor(
+        border[0],
+        border[1],
+        border[2],
+      );
+      doc.rect(
+        margin,
+        y,
+        contentWidth,
+        rowHeight,
+        'S',
+      );
+
       let x = margin;
-      doc.setFont('helvetica', 'bold');
+
+      doc.setFont(
+        'helvetica',
+        'bold',
+      );
       doc.setFontSize(8.5);
-      doc.setTextColor(ink[0], ink[1], ink[2]);
-      data.columns.forEach((_, index) => {
-        if (index > 0) doc.line(x, y, x, y + rowHeight);
-        doc.text(cellLines[index], x + 3, y + 4.5);
+      doc.setTextColor(
+        ink[0],
+        ink[1],
+        ink[2],
+      );
+
+      columns.forEach((_, index) => {
+        if (index > 0) {
+          doc.line(
+            x,
+            y,
+            x,
+            y + rowHeight,
+          );
+        }
+
+        doc.text(
+          cellLines[index],
+          x + 3,
+          y + 4.5,
+        );
+
         x += widths[index];
       });
+
       y += rowHeight;
     };
 
     drawHeader();
-    data.rows.forEach((row, rowIndex) => {
-      const cellLines = data.columns.map((column, index) => wrap(row[column] ?? '', widths[index] - 6));
-      const rowHeight = Math.max(7, Math.max(...cellLines.map((lines) => lines.length)) * lineHeight + 5);
+
+    rows.forEach((row, rowIndex) => {
+      const cellLines = columns.map(
+        (column, index) =>
+          wrap(
+            row[column] ?? '',
+            widths[index] - 6,
+          ),
+      );
+
+      const rowHeight = Math.max(
+        7,
+        Math.max(
+          ...cellLines.map(
+            (lines) => lines.length,
+          ),
+        ) *
+          lineHeight +
+          5,
+      );
+
       if (y + rowHeight > bottom) {
         addPage();
         drawHeader();
       }
+
       if (rowIndex % 2 === 1) {
-        doc.setFillColor(lightFill[0], lightFill[1], lightFill[2]);
-        doc.rect(margin, y, contentWidth, rowHeight, 'F');
+        doc.setFillColor(
+          lightFill[0],
+          lightFill[1],
+          lightFill[2],
+        );
+        doc.rect(
+          margin,
+          y,
+          contentWidth,
+          rowHeight,
+          'F',
+        );
       }
-      doc.setDrawColor(border[0], border[1], border[2]);
-      doc.rect(margin, y, contentWidth, rowHeight, 'S');
+
+      doc.setDrawColor(
+        border[0],
+        border[1],
+        border[2],
+      );
+      doc.rect(
+        margin,
+        y,
+        contentWidth,
+        rowHeight,
+        'S',
+      );
+
       let x = margin;
-      doc.setFont('helvetica', 'normal');
+
+      doc.setFont(
+        'helvetica',
+        'normal',
+      );
       doc.setFontSize(8.5);
-      doc.setTextColor(ink[0], ink[1], ink[2]);
-      data.columns.forEach((_, index) => {
-        if (index > 0) doc.line(x, y, x, y + rowHeight);
-        doc.text(cellLines[index], x + 3, y + 4.5);
+      doc.setTextColor(
+        ink[0],
+        ink[1],
+        ink[2],
+      );
+
+      columns.forEach((_, index) => {
+        if (index > 0) {
+          doc.line(
+            x,
+            y,
+            x,
+            y + rowHeight,
+          );
+        }
+
+        doc.text(
+          cellLines[index],
+          x + 3,
+          y + 4.5,
+        );
+
         x += widths[index];
       });
+
       y += rowHeight;
     });
   };
@@ -837,6 +994,34 @@ export function downloadReportPDF(data: ReportPdfData) {
   drawFindings();
   drawSection(data.labels.dataTable);
   drawTable();
+
+  if (
+    data.secondaryColumns?.length &&
+    data.secondaryRows
+  ) {
+    drawSection(
+      data.secondaryLabel ??
+        'Additional analysis',
+    );
+    drawTable(
+      data.secondaryColumns,
+      data.secondaryRows,
+    );
+  }
+
+  if (
+    data.tertiaryColumns?.length &&
+    data.tertiaryRows
+  ) {
+    drawSection(
+      data.tertiaryLabel ??
+        'Additional estimates',
+    );
+    drawTable(
+      data.tertiaryColumns,
+      data.tertiaryRows,
+    );
+  }
 
   const pageCount = doc.getNumberOfPages();
   for (let page = 1; page <= pageCount; page += 1) {
@@ -932,6 +1117,7 @@ export interface DetectionReportSource {
   selectedIndex?: number;
   confidenceThreshold?: number;
   error?: string;
+  bathymetry?: GebcoDepthResponse | null;
 }
 
 function detectionReportPredictions(source: DetectionReportSource): ModelPrediction[] {
@@ -957,7 +1143,49 @@ function detectionReportFileName(source: DetectionReportSource): string {
   return `detection-report-${safeName || 'image'}`;
 }
 
-export function downloadDetectionReport(source: DetectionReportSource, format: DetectionReportFormat, language: Language = 'en'): string {
+export function downloadDetectionReport(
+  source: DetectionReportSource,
+  format: DetectionReportFormat,
+  language: Language = 'en',
+): string {
+  const fileName = detectionReportFileName(source);
+  const cachedBathymetry = source.bathymetry ?? null;
+
+  if (cachedBathymetry || !source.detection?.gps) {
+    return buildDetectionReport(
+      source,
+      format,
+      language,
+      cachedBathymetry,
+    );
+  }
+
+  void fetchGebcoDepth(
+    source.detection.gps.latitude,
+    source.detection.gps.longitude,
+    { spanKm: 1.2, samples: 11 },
+  )
+    .then((bathymetry) => {
+      buildDetectionReport(
+        source,
+        format,
+        language,
+        bathymetry,
+      );
+    })
+    .catch(() => {
+      buildDetectionReport(
+        source,
+        format,
+        language,
+        null,
+      );
+    });
+
+  return `${fileName}.${format}`;
+}
+
+function buildDetectionReport(source: DetectionReportSource, format: DetectionReportFormat, language: Language, bathymetryOverride: GebcoDepthResponse | null): string {
   const predictions = detectionReportPredictions(source);
   const selectedIndex = predictions.length > 0
     ? Math.min(Math.max(source.selectedIndex ?? 0, 0), predictions.length - 1)
@@ -971,6 +1199,9 @@ export function downloadDetectionReport(source: DetectionReportSource, format: D
     ? Math.max(...predictions.map((prediction) => prediction.confidence))
     : 0;
   const primary = source.detection;
+
+  const bathymetry = bathymetryOverride ?? source.bathymetry ?? null;
+
   const fileName = detectionReportFileName(source);
   const generatedAt = new Date().toISOString();
   const t = makeT(language);
@@ -1027,6 +1258,18 @@ export function downloadDetectionReport(source: DetectionReportSource, format: D
           notes: primary.notes,
         }
       : null,
+    bathymetry_analysis: bathymetry
+      ? {
+          coordinates: bathymetry.coordinates,
+          dataset: bathymetry.dataset,
+          source: bathymetry.source,
+          resolution: bathymetry.resolution,
+          provenance: bathymetry.provenance,
+          bathymetry: bathymetry.bathymetry,
+          oceanography: bathymetry.oceanography,
+          queried_at: bathymetry.queried_at,
+        }
+      : null,
     error: source.error ?? null,
   };
   const baseRow: Record<string, string | number | undefined> = {
@@ -1051,6 +1294,25 @@ export function downloadDetectionReport(source: DetectionReportSource, format: D
     removal_method: primary?.removalMethod,
     notes: primary?.notes,
     error: source.error,
+    bathymetry_depth_m: bathymetry?.bathymetry.depth_m,
+    bathymetry_depth_ft: bathymetry?.bathymetry.depth_ft,
+    bathymetry_elevation_m: bathymetry?.bathymetry.elevation_m,
+    bathymetry_avg_transect_depth_m: bathymetry?.bathymetry.average_transect_depth_m,
+    bathymetry_min_depth_m: bathymetry?.bathymetry.min_depth_m,
+    bathymetry_max_depth_m: bathymetry?.bathymetry.max_depth_m,
+    bathymetry_gradient_deg: bathymetry?.bathymetry.seabed_gradient_deg,
+    ocean_zone: bathymetry?.oceanography.zone,
+    estimated_water_temp_c: bathymetry?.oceanography.estimated_water_temp_c,
+    sound_speed_mps: bathymetry?.oceanography.sound_speed_mps,
+    hydrostatic_pressure_bar: bathymetry?.oceanography.hydrostatic_pressure_bar,
+    light_penetration_pct: bathymetry?.oceanography.light_penetration_pct,
+    diver_classification: bathymetry?.oceanography.diver_classification,
+    bathymetry_dataset: bathymetry?.dataset,
+    bathymetry_source: bathymetry?.provenance.source_name,
+    bathymetry_source_type: bathymetry?.provenance.source_type,
+    bathymetry_is_live: bathymetry?.provenance.is_live === undefined ? undefined : String(bathymetry.provenance.is_live),
+    bathymetry_is_synthetic: bathymetry?.provenance.is_synthetic === undefined ? undefined : String(bathymetry.provenance.is_synthetic),
+    bathymetry_warning: bathymetry?.provenance.warning ?? undefined,
   };
   const rows: Record<string, string | number | undefined>[] = predictions.length > 0
     ? predictions.map((prediction, index) => ({
@@ -1111,6 +1373,10 @@ export function downloadDetectionReport(source: DetectionReportSource, format: D
     ['Position', position],
     ['Department', departmentName],
     ['Response deadline', responseDeadline],
+    ['Depth', bathymetry ? `${bathymetry.bathymetry.depth_m.toFixed(1)} m` : '—'],
+    ['Bathymetry source', bathymetry?.provenance.source_name ?? '—'],
+    ['Bathymetry status', bathymetry?.provenance.source_type === 'live' ? 'Live GEBCO' : bathymetry?.provenance.source_type === 'synthetic_fallback' ? 'Synthetic fallback' : 'Unavailable'],
+    ['Oceanographic zone', bathymetry?.oceanography.zone ?? '—'],
   ];
   const findings = [
     `${predictions.length} detection highlight${predictions.length === 1 ? '' : 's'} recorded in ${source.imageId || source.id}.`,
@@ -1121,7 +1387,16 @@ export function downloadDetectionReport(source: DetectionReportSource, format: D
       ? `Primary assessment: ${primary.className} at ${pct(primary.confidence)} confidence with ${primary.riskLevel} risk.`
       : 'No primary assessment was available.',
     source.error ? `Analysis note: ${source.error}` : `Analysis status: ${status}.`,
-  ];
+    bathymetry
+      ? `Bathymetry: ${bathymetry.bathymetry.depth_m.toFixed(1)} m at ${fmtCoordinate(bathymetry.coordinates.lat, bathymetry.coordinates.lng)}.`
+      : 'Bathymetry: no result was available for this detection.',
+    bathymetry
+      ? `Provenance: ${bathymetry.provenance.source_name}.`
+      : '',
+    bathymetry
+      ? 'Oceanographic values shown in this report are depth-derived estimates, not direct sensor measurements.'
+      : '',
+  ].filter(Boolean);
   const columns = ['#', 'Label', 'Confidence', 'BBox (x,y,w,h)', 'Active'];
   const pdfRows = predictions.length > 0
     ? predictions.map((prediction, index) => ({
@@ -1138,6 +1413,31 @@ export function downloadDetectionReport(source: DetectionReportSource, format: D
         'BBox (x,y,w,h)': '—',
         Active: '—',
       }];
+  const bathymetryColumns = ['Metric', 'Value'];
+  const bathymetryRows = bathymetry
+    ? [
+        { Metric: 'Depth', Value: `${bathymetry.bathymetry.depth_m.toFixed(1)} m` },
+        { Metric: 'Depth (ft)', Value: `${bathymetry.bathymetry.depth_ft.toFixed(1)} ft` },
+        { Metric: 'Elevation', Value: `${bathymetry.bathymetry.elevation_m.toFixed(1)} m` },
+        { Metric: 'Transect average', Value: `${bathymetry.bathymetry.average_transect_depth_m.toFixed(1)} m` },
+        { Metric: 'Depth range', Value: `${bathymetry.bathymetry.min_depth_m.toFixed(1)}–${bathymetry.bathymetry.max_depth_m.toFixed(1)} m` },
+        { Metric: 'Seabed gradient', Value: `${bathymetry.bathymetry.seabed_gradient_deg.toFixed(1)}°` },
+        { Metric: 'Zone', Value: bathymetry.oceanography.zone },
+        { Metric: 'Source', Value: bathymetry.provenance.source_name },
+        { Metric: 'Data status', Value: bathymetry.provenance.source_type === 'live' ? 'Live GEBCO' : 'Synthetic fallback' },
+      ]
+    : [{ Metric: 'Bathymetry', Value: 'Unavailable' }];
+  const oceanographyColumns = ['Metric', 'Estimated value'];
+  const oceanographyRows = bathymetry
+    ? [
+        { Metric: 'Water temperature', 'Estimated value': `${bathymetry.oceanography.estimated_water_temp_c.toFixed(1)} °C` },
+        { Metric: 'Sound speed', 'Estimated value': `${bathymetry.oceanography.sound_speed_mps.toFixed(1)} m/s` },
+        { Metric: 'Hydrostatic pressure', 'Estimated value': `${bathymetry.oceanography.hydrostatic_pressure_bar.toFixed(2)} bar` },
+        { Metric: 'Light penetration', 'Estimated value': `${bathymetry.oceanography.light_penetration_pct.toFixed(1)}%` },
+        { Metric: 'Diver / ROV classification', 'Estimated value': bathymetry.oceanography.diver_classification },
+      ]
+    : [{ Metric: 'Oceanography', 'Estimated value': 'Unavailable' }];
+
   const pdfData: ReportPdfData = {
     id: fileName,
     title: `Detection report · ${source.imageId || source.id}`,
@@ -1149,6 +1449,13 @@ export function downloadDetectionReport(source: DetectionReportSource, format: D
     findings,
     columns,
     rows: pdfRows,
+    secondaryColumns: bathymetryColumns,
+    secondaryRows: bathymetryRows,
+    secondaryLabel: 'Depth Analysis & Provenance',
+    tertiaryColumns: oceanographyColumns,
+    tertiaryRows: oceanographyRows,
+    tertiaryLabel: 'Derived Oceanographic Estimates',
+    orientation: 'landscape',
     labels: {
       keyMetrics: t('rpt.pdfKeyMetrics'),
       findings: t('rpt.pdfFindings'),
