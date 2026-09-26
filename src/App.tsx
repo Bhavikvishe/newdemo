@@ -1,7 +1,12 @@
 import { useEffect } from 'react';
-import { useHashRoute, matchRoute, navigate } from './lib/router';
+import {
+  useHashRoute,
+  matchRoute,
+  navigate,
+} from './lib/router';
 import { useStore } from './lib/store';
 import { Shell } from './components/Shell';
+
 import { LoginPage } from './pages/Login';
 import { LandingPage } from './pages/Landing';
 import { DashboardPage } from './pages/Dashboard';
@@ -11,7 +16,6 @@ import { DepthAnalysisPage } from './pages/DepthAnalysis';
 import { MapPage } from './pages/Map';
 import { AlertsPage } from './pages/Alerts';
 import { HistoryPage } from './pages/History';
-import { AnalyticsPage } from './pages/Analytics';
 import { ReportsPage } from './pages/Reports';
 import { SettingsPage } from './pages/Settings';
 import { DepartmentsPage } from './pages/Departments';
@@ -19,47 +23,101 @@ import { MyDepartmentPage } from './pages/MyDepartment';
 import { AdminPage } from './pages/Admin';
 import { DetailPage } from './pages/Detail';
 
-const PUBLIC_ROUTES = new Set(['login', 'landing']);
+const PUBLIC_ROUTES = new Set([
+  'login',
+  'landing',
+]);
 
-function Page({ page }: { page: string }) {
+function Page({
+  page,
+}: {
+  page: string;
+}) {
   switch (page) {
-    case 'overview': return <DashboardPage />;
-    case 'detection': return <DetectionPage />;
-    case 'batch': return <BatchPage />;
-    case 'depth': return <DepthAnalysisPage />;
-    case 'map': return <MapPage />;
-    case 'alerts': return <AlertsPage />;
-    case 'history': return <HistoryPage />;
-    case 'analytics': return <AnalyticsPage />;
-    case 'reports': return <ReportsPage />;
-    case 'settings': return <SettingsPage />;
-    case 'departments': return <DepartmentsPage />;
-    case 'department': return <MyDepartmentPage />;
-    case 'admin': return <AdminPage />;
-    case 'detail': return <DetailPage />;
-    default: return <DashboardPage />;
+    case 'overview':
+      return <DashboardPage />;
+
+    case 'detection':
+      return <DetectionPage />;
+
+    case 'batch':
+      return <BatchPage />;
+
+    case 'depth':
+      return <DepthAnalysisPage />;
+
+    case 'map':
+      return <MapPage />;
+
+    case 'alerts':
+      return <AlertsPage />;
+
+    case 'history':
+      return <HistoryPage />;
+
+    case 'reports':
+      return <ReportsPage />;
+
+    case 'settings':
+      return <SettingsPage />;
+
+    case 'departments':
+      return <DepartmentsPage />;
+
+    case 'department':
+      return <MyDepartmentPage />;
+
+    case 'admin':
+      return <AdminPage />;
+
+    case 'detail':
+      return <DetailPage />;
+
+    default:
+      return <DashboardPage />;
   }
 }
 
 export default function App() {
   const { user } = useStore();
+
   const route = useHashRoute();
-  const { page } = matchRoute(route);
+
+  const { page } =
+    matchRoute(route);
 
   const signedIn = !!user;
 
   useEffect(() => {
-    if (!PUBLIC_ROUTES.has(page) && !signedIn) navigate('login');
-    else if (page === 'login' && signedIn) navigate('overview');
+    if (
+      !PUBLIC_ROUTES.has(page) &&
+      !signedIn
+    ) {
+      navigate('login');
+    } else if (
+      page === 'login' &&
+      signedIn
+    ) {
+      navigate('overview');
+    }
   }, [page, signedIn]);
 
-  if (page === 'landing') return <LandingPage />;
+  if (page === 'landing') {
+    return <LandingPage />;
+  }
 
-  if (!signedIn) return <LoginPage />;
+  if (!signedIn) {
+    return <LoginPage />;
+  }
 
-  if (page === 'login') return <LoginPage />;
+  if (page === 'login') {
+    return <LoginPage />;
+  }
 
-  const restricted = page === 'admin' && user?.department !== 'system-admin';
+  const restricted =
+    page === 'admin' &&
+    user?.department !==
+      'system-admin';
 
   return (
     <Shell route={route}>
@@ -75,13 +133,20 @@ export default function App() {
         >
           <div
             className="tiny upper acc"
-            style={{ marginBottom: 8 }}
+            style={{
+              marginBottom: 8,
+            }}
           >
             Privilege check
           </div>
 
-          <h2 style={{ margin: '0 0 8px' }}>
-            Administrator access required
+          <h2
+            style={{
+              margin: '0 0 8px',
+            }}
+          >
+            Administrator access
+            required
           </h2>
 
           <p
@@ -91,14 +156,21 @@ export default function App() {
               marginBottom: 20,
             }}
           >
-            Task assignment is restricted to the System Administrator role.
-            Sign in with a system-admin account to assign tasks to departments
-            and members.
+            Task assignment is
+            restricted to the
+            System Administrator
+            role. Sign in with a
+            system-admin account
+            to assign tasks to
+            departments and
+            members.
           </p>
 
           <button
             className="btn btn-primary"
-            onClick={() => navigate('overview')}
+            onClick={() =>
+              navigate('overview')
+            }
           >
             Back to overview
           </button>
