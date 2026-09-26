@@ -171,8 +171,15 @@ export function BatchPage() {
 
           let createdDetectionId: string | undefined = undefined;
 
-          // If real objects found, record a primary Detection entity in store
+          // If real objects found, record a primary Detection entity in store.
+          // GPS must come from image metadata returned by the backend.
+          // Never derive coordinates from a YOLO bounding box.
           if (detCount > 0 && primaryPred && primaryMapped) {
+            if (!resp.gps) {
+              throw new Error(
+                `No GPS metadata found in ${targetFilename}. Add EXIF GPS coordinates and retry this frame.`,
+              );
+            }
             const meta = CLASS_META[primaryMapped];
             const dataUrl = await fileToDataUrl(targetFile);
             const imageSrc = dataUrl || nextItem.previewUrl;
@@ -190,12 +197,7 @@ export function BatchPage() {
               className: primaryMapped,
               confidence: primaryPred.confidence,
               boundingBox: { ...primaryPred.bbox, normalized: true },
-              gps: {
-                latitude: 18.922 + (primaryPred.bbox.x - 0.5) * 0.05,
-                longitude: 72.834 + (primaryPred.bbox.y - 0.5) * 0.05,
-                accuracy: 3,
-                timestamp: new Date().toISOString(),
-              },
+              gps: resp.gps,
               estimatedSize: {
                 length: +(primaryPred.bbox.width * 25).toFixed(1),
                 width: +(primaryPred.bbox.height * 12).toFixed(1),

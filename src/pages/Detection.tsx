@@ -135,7 +135,15 @@ export function DetectionPage() {
         return;
       }
 
-      // We have real predictions from best.pt
+      // We have real predictions from best.pt.
+      // GPS must come from image metadata returned by the backend.
+      // Never derive coordinates from a YOLO bounding box.
+      if (!resp.gps) {
+        throw new Error(
+          'No GPS metadata found in this image. Add EXIF GPS coordinates and scan again.',
+        );
+      }
+
       const p = preds[0];
       const mappedClass: DetectionClass = mapClass(p.label) ?? 'shipwreck';
       const meta = CLASS_META[mappedClass];
@@ -167,12 +175,7 @@ export function DetectionPage() {
           bbox: { ...pr.bbox, normalized: true },
           raw_bbox: pr.raw_bbox,
         })),
-        gps: {
-          latitude: 18.922 + (p.bbox.x - 0.5) * 0.05,
-          longitude: 72.834 + (p.bbox.y - 0.5) * 0.05,
-          accuracy: 3,
-          timestamp: new Date().toISOString(),
-        },
+        gps: resp.gps,
         estimatedSize: {
           length: +(p.bbox.width * 25).toFixed(1),
           width: +(p.bbox.height * 12).toFixed(1),
