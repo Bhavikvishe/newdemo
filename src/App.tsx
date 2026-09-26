@@ -28,7 +28,6 @@ function Page({ page }: { page: string }) {
     case 'detection': return <DetectionPage />;
     case 'batch': return <BatchPage />;
     case 'depth': return <DepthAnalysisPage />;
-    case 'live': return <DepthAnalysisPage />;
     case 'map': return <MapPage />;
     case 'navigate': return <NavigatePage />;
     case 'alerts': return <AlertsPage />;
@@ -67,13 +66,44 @@ export default function App() {
   return (
     <Shell route={route}>
       {restricted ? (
-        <div className="card solid" style={{ maxWidth: 560, margin: '8vh auto', padding: 32, textAlign: 'center' }}>
-          <div className="tiny upper acc" style={{ marginBottom: 8 }}>Privilege check</div>
-          <h2 style={{ margin: '0 0 8px' }}>Administrator access required</h2>
-          <p className="muted" style={{ fontSize: 13.5, marginBottom: 20 }}>
-            Task assignment is restricted to the System Administrator role. Sign in with a system-admin account to assign tasks to departments and members.
+        <div
+          className="card solid"
+          style={{
+            maxWidth: 560,
+            margin: '8vh auto',
+            padding: 32,
+            textAlign: 'center',
+          }}
+        >
+          <div
+            className="tiny upper acc"
+            style={{ marginBottom: 8 }}
+          >
+            Privilege check
+          </div>
+
+          <h2 style={{ margin: '0 0 8px' }}>
+            Administrator access required
+          </h2>
+
+          <p
+            className="muted"
+            style={{
+              fontSize: 13.5,
+              marginBottom: 20,
+            }}
+          >
+            Task assignment is restricted to the System Administrator role.
+            Sign in with a system-admin account to assign tasks to departments
+            and members.
           </p>
-          <button className="btn btn-primary" onClick={() => navigate('overview')}>Back to overview</button>
+
+          <button
+            className="btn btn-primary"
+            onClick={() => navigate('overview')}
+          >
+            Back to overview
+          </button>
         </div>
       ) : (
         <Page page={page} />
