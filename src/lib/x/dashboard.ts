@@ -1,107 +1,308 @@
 ﻿export const xEn: Record<string, string> = {
-  'dash.sub': "System-wide sonar intelligence, routing and response at a glance.",
-  'dash.today24': "{n} in last 24h",
-  'dash.recovered': "183t est. recovered",
-  'dash.infraObjs': "{n} infra objects",
-  'dash.attention': "attention required",
-  'dash.avgRespSub': "{n}h avg response",
-  'dash.resolutionSub': "{n}% resolution",
-  'dash.hoursToRes': "hours to resolution",
-  'dash.gridsActive': "surveyed grids active",
-  'dash.ktSonar': "Sonar Array",
-  'dash.commandSweep': "Command Sweep",
-  'dash.sweepTag': "SWEEP {n}",
-  'dash.aiCore': "AI Core",
-  'dash.sonarArrayRow': "Sonar array",
-  'dash.gpsFix': "GPS fix",
-  'dash.aiOptimal': "12.4% · optimal",
-  'dash.sonarPaired': "600 kHz · paired",
-  'dash.gpsLocked': "locked · 3m",
-  'dash.newDetection': "New Detection",
-  'dash.goLive': "Go Live",
-  'dash.ktDist': "Distribution",
-  'dash.detections': "Detections",
-  'dash.weekWindow': "7-day window",
-  'dash.ktCatHist': "By object type",
-  'dash.ktRespStat': "Freshness of cases",
-  'dash.ktFeed': "Latest intelligence",
-  'dash.exportCsv': "Export CSV",
-  'dash.viewAll': "View all",
-  'dash.conf': "{pct}% conf",
-  'dash.ktDeptLoad': "Open case load",
-  'dash.deptLoad': "Department workload",
-  'dash.deptDir': "Department directory",
-  'dash.myDept': "My department",
+  'dash.sub':
+    'System-wide sonar intelligence, routing and response at a glance.',
+  'dash.today24':
+    '{n} in last 24h',
+  'dash.recovered':
+    '183t est. recovered',
+  'dash.infraObjs':
+    '{n} infra objects',
+  'dash.attention':
+    'attention required',
+  'dash.avgRespSub':
+    '{n}h avg response',
+  'dash.resolutionSub':
+    '{n}% resolution',
+  'dash.hoursToRes':
+    'hours to resolution',
+  'dash.gridsActive':
+    'surveyed grids active',
+
+  'dash.ktSonar':
+    'Sonar Array',
+  'dash.commandSweep':
+    'Command Sweep',
+  'dash.sweepTag':
+    'SWEEP {n}',
+  'dash.aiCore':
+    'AI Core',
+  'dash.sonarArrayRow':
+    'Sonar array',
+  'dash.gpsFix':
+    'GPS fix',
+  'dash.aiOptimal':
+    '12.4% · optimal',
+  'dash.sonarPaired':
+    '600 kHz · paired',
+  'dash.gpsLocked':
+    'locked · 3m',
+  'dash.newDetection':
+    'New Detection',
+  'dash.goLive':
+    'Go Live',
+
+  'dash.ktDist':
+    'Distribution',
+  'dash.detections':
+    'Detections',
+  'dash.weekWindow':
+    '7-day window',
+  'dash.ktCatHist':
+    'By object type',
+  'dash.ktRespStat':
+    'Freshness of cases',
+  'dash.ktFeed':
+    'Latest intelligence',
+  'dash.exportCsv':
+    'Export CSV',
+  'dash.viewAll':
+    'View all',
+  'dash.conf':
+    '{pct}% conf',
+  'dash.ktDeptLoad':
+    'Open case load',
+  'dash.deptLoad':
+    'Department workload',
+  'dash.deptDir':
+    'Department directory',
+  'dash.myDept':
+    'My department',
+
+  // Dashboard analytics card labels
+  'anx.ktWindow':
+    'Analysis Window',
+  'anx.ktObject':
+    'Object Type',
+  'anx.ktSeverity':
+    'Severity',
+  'anx.ktModel':
+    'Model Confidence',
+  'anx.ktOutcome':
+    'Case Outcome',
+  'anx.ktGrid':
+    'Survey Area',
+  'anx.ktDepartment':
+    'Response Department',
+  'anx.ktLoad':
+    'Workload',
+  'anx.ktLogistics':
+    'Logistics',
+
+  // Dashboard analytics values
+  'anx.resolved':
+    'Resolved',
+  'anx.open':
+    'Open',
+  'anx.cases':
+    'cases',
+  'anx.hours':
+    '{v} hours',
+  'anx.avgNote':
+    'Average response time',
 };
 
 export const xHi: Record<string, string> = {
-  'dash.sub': "पूरे सिस्टम की सोनार खुफिया जानकारी, रूटिंग और प्रतिक्रिया एक नज़र में।",
-  'dash.today24': "पिछले 24 घंटे में {n}",
-  'dash.recovered': "लगभग 183 टन बरामद",
-  'dash.infraObjs': "{n} इन्फ्रा वस्तुएँ",
-  'dash.attention': "ध्यान देने की आवश्यकता",
-  'dash.avgRespSub': "{n} घंटे औसत प्रतिक्रिया",
-  'dash.resolutionSub': "{n}% समाधान दर",
-  'dash.hoursToRes': "समाधान तक घंटे",
-  'dash.gridsActive': "सर्वेक्षित ग्रिड सक्रिय",
-  'dash.ktSonar': "सोनार एरे",
-  'dash.commandSweep': "कमांड स्वीप",
-  'dash.sweepTag': "स्वीप {n}",
-  'dash.aiCore': "एआई कोर",
-  'dash.sonarArrayRow': "सोनार एरे",
-  'dash.gpsFix': "जीपीएस फिक्स",
-  'dash.aiOptimal': "12.4% · इष्टतम",
-  'dash.sonarPaired': "600 kHz · युग्मित",
-  'dash.gpsLocked': "लॉक · 3 मी",
-  'dash.newDetection': "नई डिटेक्शन",
-  'dash.goLive': "लाइव देखें",
-  'dash.ktDist': "वितरण",
-  'dash.detections': "डिटेक्शन",
-  'dash.weekWindow': "7-दिन की अवधि",
-  'dash.ktCatHist': "वस्तु प्रकार से",
-  'dash.ktRespStat': "मामलों की ताज़गी",
-  'dash.ktFeed': "नवीनतम खुफिया जानकारी",
-  'dash.exportCsv': "CSV निर्यात करें",
-  'dash.viewAll': "सभी देखें",
-  'dash.conf': "{pct}% विश्वास",
-  'dash.ktDeptLoad': "खुले मामलों का भार",
-  'dash.deptLoad': "विभाग का कार्यभार",
-  'dash.deptDir': "विभाग निर्देशिका",
-  'dash.myDept': "मेरा विभाग",
+  'dash.sub':
+    'पूरे सिस्टम की सोनार खुफिया जानकारी, रूटिंग और प्रतिक्रिया एक नज़र में।',
+  'dash.today24':
+    'पिछले 24 घंटे में {n}',
+  'dash.recovered':
+    'लगभग 183 टन बरामद',
+  'dash.infraObjs':
+    '{n} इन्फ्रा वस्तुएँ',
+  'dash.attention':
+    'ध्यान देने की आवश्यकता',
+  'dash.avgRespSub':
+    '{n} घंटे औसत प्रतिक्रिया',
+  'dash.resolutionSub':
+    '{n}% समाधान दर',
+  'dash.hoursToRes':
+    'समाधान तक घंटे',
+  'dash.gridsActive':
+    'सर्वेक्षित ग्रिड सक्रिय',
+
+  'dash.ktSonar':
+    'सोनार एरे',
+  'dash.commandSweep':
+    'कमांड स्वीप',
+  'dash.sweepTag':
+    'स्वीप {n}',
+  'dash.aiCore':
+    'एआई कोर',
+  'dash.sonarArrayRow':
+    'सोनार एरे',
+  'dash.gpsFix':
+    'जीपीएस फिक्स',
+  'dash.aiOptimal':
+    '12.4% · इष्टतम',
+  'dash.sonarPaired':
+    '600 kHz · युग्मित',
+  'dash.gpsLocked':
+    'लॉक · 3 मी',
+  'dash.newDetection':
+    'नई डिटेक्शन',
+  'dash.goLive':
+    'लाइव देखें',
+
+  'dash.ktDist':
+    'वितरण',
+  'dash.detections':
+    'डिटेक्शन',
+  'dash.weekWindow':
+    '7-दिन की अवधि',
+  'dash.ktCatHist':
+    'वस्तु प्रकार से',
+  'dash.ktRespStat':
+    'मामलों की ताज़गी',
+  'dash.ktFeed':
+    'नवीनतम खुफिया जानकारी',
+  'dash.exportCsv':
+    'CSV निर्यात करें',
+  'dash.viewAll':
+    'सभी देखें',
+  'dash.conf':
+    '{pct}% विश्वास',
+  'dash.ktDeptLoad':
+    'खुले मामलों का भार',
+  'dash.deptLoad':
+    'विभाग का कार्यभार',
+  'dash.deptDir':
+    'विभाग निर्देशिका',
+  'dash.myDept':
+    'मेरा विभाग',
+
+  // Dashboard analytics card labels
+  'anx.ktWindow':
+    'विश्लेषण अवधि',
+  'anx.ktObject':
+    'वस्तु प्रकार',
+  'anx.ktSeverity':
+    'जोखिम स्तर',
+  'anx.ktModel':
+    'मॉडल कॉन्फिडेंस',
+  'anx.ktOutcome':
+    'मामले का परिणाम',
+  'anx.ktGrid':
+    'सर्वेक्षण क्षेत्र',
+  'anx.ktDepartment':
+    'प्रतिक्रिया विभाग',
+  'anx.ktLoad':
+    'कार्यभार',
+  'anx.ktLogistics':
+    'लॉजिस्टिक्स',
+
+  // Dashboard analytics values
+  'anx.resolved':
+    'हल किए गए',
+  'anx.open':
+    'खुले',
+  'anx.cases':
+    'मामले',
+  'anx.hours':
+    '{v} घंटे',
+  'anx.avgNote':
+    'औसत प्रतिक्रिया समय',
 };
 
 export const xMr: Record<string, string> = {
-  'dash.sub': "संपूर्ण सिस्टमची सोनार गुप्तचरखबरी, रूटिंग आणि प्रतिसाद एका दृष्टिक्षेपात।",
-  'dash.today24': "मागील २४ तासांत {n}",
-  'dash.recovered': "अंदाजे 183 टन बरामद",
-  'dash.infraObjs': "{n} इन्फ्रा वस्तू",
-  'dash.attention': "लक्ष देणे आवश्यक",
-  'dash.avgRespSub': "{n} तास सरासरी प्रतिसाद",
-  'dash.resolutionSub': "{n}% निकाल दर",
-  'dash.hoursToRes': "निकालापर्यंतचे तास",
-  'dash.gridsActive': "सर्वेक्षित ग्रिड सक्रिय",
-  'dash.ktSonar': "सोनार अॅरे",
-  'dash.commandSweep': "कमांड स्वीप",
-  'dash.sweepTag': "स्वीप {n}",
-  'dash.aiCore': "एआय कोअर",
-  'dash.sonarArrayRow': "सोनार अॅरे",
-  'dash.gpsFix': "जीपीएस फिक्स",
-  'dash.aiOptimal': "12.4% · सर्वोत्तम",
-  'dash.sonarPaired': "600 kHz · जोडलेले",
-  'dash.gpsLocked': "लॉक · 3 मी",
-  'dash.newDetection': "नवीन डिटेक्शन",
-  'dash.goLive': "लाइव्ह पहा",
-  'dash.ktDist': "वितरण",
-  'dash.detections': "डिटेक्शन",
-  'dash.weekWindow': "७-दिवसांचा कालावधी",
-  'dash.ktCatHist': "वस्तू प्रकारानुसार",
-  'dash.ktRespStat': "प्रकरणांची ताजेपणा",
-  'dash.ktFeed': "नवीनतम गुप्तचरखबरी",
-  'dash.exportCsv': "CSV निर्यात करा",
-  'dash.viewAll': "सर्व पहा",
-  'dash.conf': "{pct}% आत्मविश्वास",
-  'dash.ktDeptLoad': "खुल्या प्रकरणांचा भार",
-  'dash.deptLoad': "विभागाचा कार्यभार",
-  'dash.deptDir': "विभाग निर्देशिका",
-  'dash.myDept': "माझा विभाग",
+  'dash.sub':
+    'संपूर्ण सिस्टमची सोनार गुप्तचरखबरी, रूटिंग आणि प्रतिसाद एका दृष्टिक्षेपात।',
+  'dash.today24':
+    'मागील २४ तासांत {n}',
+  'dash.recovered':
+    'अंदाजे 183 टन बरामद',
+  'dash.infraObjs':
+    '{n} इन्फ्रा वस्तू',
+  'dash.attention':
+    'लक्ष देणे आवश्यक',
+  'dash.avgRespSub':
+    '{n} तास सरासरी प्रतिसाद',
+  'dash.resolutionSub':
+    '{n}% निकाल दर',
+  'dash.hoursToRes':
+    'निकालापर्यंतचे तास',
+  'dash.gridsActive':
+    'सर्वेक्षित ग्रिड सक्रिय',
+
+  'dash.ktSonar':
+    'सोनार अॅरे',
+  'dash.commandSweep':
+    'कमांड स्वीप',
+  'dash.sweepTag':
+    'स्वीप {n}',
+  'dash.aiCore':
+    'एआय कोअर',
+  'dash.sonarArrayRow':
+    'सोनार अॅरे',
+  'dash.gpsFix':
+    'जीपीएस फिक्स',
+  'dash.aiOptimal':
+    '12.4% · सर्वोत्तम',
+  'dash.sonarPaired':
+    '600 kHz · जोडलेले',
+  'dash.gpsLocked':
+    'लॉक · 3 मी',
+  'dash.newDetection':
+    'नवीन डिटेक्शन',
+  'dash.goLive':
+    'लाइव्ह पहा',
+
+  'dash.ktDist':
+    'वितरण',
+  'dash.detections':
+    'डिटेक्शन',
+  'dash.weekWindow':
+    '७-दिवसांचा कालावधी',
+  'dash.ktCatHist':
+    'वस्तू प्रकारानुसार',
+  'dash.ktRespStat':
+    'प्रकरणांची ताजेपणा',
+  'dash.ktFeed':
+    'नवीनतम गुप्तचरखबरी',
+  'dash.exportCsv':
+    'CSV निर्यात करा',
+  'dash.viewAll':
+    'सर्व पहा',
+  'dash.conf':
+    '{pct}% आत्मविश्वास',
+  'dash.ktDeptLoad':
+    'खुल्या प्रकरणांचा भार',
+  'dash.deptLoad':
+    'विभागाचा कार्यभार',
+  'dash.deptDir':
+    'विभाग निर्देशिका',
+  'dash.myDept':
+    'माझा विभाग',
+
+  // Dashboard analytics card labels
+  'anx.ktWindow':
+    'विश्लेषण कालावधी',
+  'anx.ktObject':
+    'वस्तू प्रकार',
+  'anx.ktSeverity':
+    'जोखीम पातळी',
+  'anx.ktModel':
+    'मॉडेल कॉन्फिडन्स',
+  'anx.ktOutcome':
+    'प्रकरणाचा निकाल',
+  'anx.ktGrid':
+    'सर्वेक्षण क्षेत्र',
+  'anx.ktDepartment':
+    'प्रतिसाद विभाग',
+  'anx.ktLoad':
+    'कार्यभार',
+  'anx.ktLogistics':
+    'लॉजिस्टिक्स',
+
+  // Dashboard analytics values
+  'anx.resolved':
+    'निकाली काढलेले',
+  'anx.open':
+    'खुले',
+  'anx.cases':
+    'प्रकरणे',
+  'anx.hours':
+    '{v} तास',
+  'anx.avgNote':
+    'सरासरी प्रतिसाद वेळ',
 };
