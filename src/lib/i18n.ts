@@ -15,6 +15,7 @@ const en: Dict = {
   'nav.depth': 'Depth Analysis',
   'nav.live': 'Depth Analysis',
   'nav.map': 'Ocean Map',
+  'nav.drift': 'Drift Forecast',
   'nav.navigate': 'Navigation',
   'nav.alerts': 'Alerts',
   'nav.history': 'Detection History',

@@ -14,6 +14,7 @@ import { DetectionPage } from './pages/Detection';
 import { BatchPage } from './pages/Batch';
 import { DepthAnalysisPage } from './pages/DepthAnalysis';
 import { MapPage } from './pages/Map';
+import { DriftForecastPage } from './pages/DriftForecast';
 import { AlertsPage } from './pages/Alerts';
 import { HistoryPage } from './pages/History';
 import { SettingsPage } from './pages/Settings';
@@ -47,6 +48,9 @@ function Page({
 
     case 'map':
       return <MapPage />;
+
+    case 'drift':
+      return <DriftForecastPage />;
 
     case 'alerts':
       return <AlertsPage />;

@@ -2,3 +2,11 @@ flask
 flask-cors
 ultralytics
 pillow
+
+numpy
+scipy
+xarray
+netCDF4
+dask
+copernicusmarine
+pytest

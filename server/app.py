@@ -1,14 +1,24 @@
-"""OCEONIX detection API.
+"""ANVESHA backend API.
 
 Run from the project root:
 
     pip install -r server/requirements.txt
     python server/app.py
 
-Serves POST /api/detect at http://localhost:5000.
+Existing endpoints:
 
-The Vite dev server proxies /api -> http://localhost:5000.
+    POST /api/detect
+    GET  /api/health
+    GET  /api/gebco/depth
+
+Drift forecasting:
+
+    POST /api/drift/forecast
 """
+
+from __future__ import annotations
+
+from datetime import datetime, timezone
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
@@ -16,9 +26,20 @@ from flask_cors import CORS
 try:
     from . import model
     from . import gebco
+    from .forecasting.models import (
+        ForecastRequest,
+        ForecastServiceError,
+    )
+    from .forecasting.forecast_service import forecast_drift
 except ImportError:
     import model
     import gebco
+
+    from forecasting.models import (
+        ForecastRequest,
+        ForecastServiceError,
+    )
+    from forecasting.forecast_service import forecast_drift
 
 
 app = Flask(__name__)
@@ -33,8 +54,10 @@ def detect():
     if not data:
         return jsonify(
             {
-                "error":
-                    "empty request body - send the raw image bytes"
+                "error": (
+                    "empty request body - "
+                    "send the raw image bytes"
+                )
             }
         ), 400
 
@@ -81,8 +104,7 @@ def detect():
     except Exception as err:
         return jsonify(
             {
-                "error":
-                    str(err)
+                "error": str(err)
             }
         ), 500
 
@@ -107,10 +129,8 @@ def health():
         return jsonify(
             {
                 "ok": False,
-                "error":
-                    str(err),
-                "weights":
-                    model.weights_path(),
+                "error": str(err),
+                "weights": model.weights_path(),
             }
         )
 
@@ -170,10 +190,183 @@ def gebco_depth():
     except Exception as err:
         return jsonify(
             {
-                "error":
-                    str(err),
-                "status":
-                    "error",
+                "error": str(err),
+                "status": "error",
+            }
+        ), 500
+
+
+@app.post("/api/drift/forecast")
+def drift_forecast():
+    """Generate a physics-based ghost-net drift forecast."""
+
+    payload = request.get_json(
+        silent=True
+    )
+
+    if not isinstance(
+        payload,
+        dict,
+    ):
+        return jsonify(
+            {
+                "status": "error",
+                "code": "INVALID_JSON",
+                "error": (
+                    "Request body must be a JSON object."
+                ),
+            }
+        ), 400
+
+    try:
+        latitude = float(
+            payload["latitude"]
+        )
+
+        longitude = float(
+            payload["longitude"]
+        )
+
+    except (
+        KeyError,
+        TypeError,
+        ValueError,
+    ):
+        return jsonify(
+            {
+                "status": "error",
+                "code": "INVALID_COORDINATES",
+                "error": (
+                    "latitude and longitude are required "
+                    "numeric fields."
+                ),
+            }
+        ), 400
+
+    horizon_hours = payload.get(
+        "horizon_hours",
+        72,
+    )
+
+    timestep_minutes = payload.get(
+        "timestep_minutes",
+        60,
+    )
+
+    source = payload.get(
+        "source",
+        "auto",
+    )
+
+    grid_margin_degrees = payload.get(
+        "grid_margin_degrees",
+        5.0,
+    )
+
+    vector_grid_size = payload.get(
+        "vector_grid_size",
+        5,
+    )
+
+    start_time_raw = payload.get(
+        "start_time"
+    )
+
+    start_time = None
+
+    if start_time_raw:
+        if not isinstance(
+            start_time_raw,
+            str,
+        ):
+            return jsonify(
+                {
+                    "status": "error",
+                    "code": "INVALID_START_TIME",
+                    "error": (
+                        "start_time must be an ISO-8601 string."
+                    ),
+                }
+            ), 400
+
+        try:
+            normalized = (
+                start_time_raw
+                .replace(
+                    "Z",
+                    "+00:00",
+                )
+            )
+
+            start_time = datetime.fromisoformat(
+                normalized
+            )
+
+            if start_time.tzinfo is None:
+                start_time = start_time.replace(
+                    tzinfo=timezone.utc
+                )
+
+            start_time = start_time.astimezone(
+                timezone.utc
+            )
+
+        except ValueError:
+            return jsonify(
+                {
+                    "status": "error",
+                    "code": "INVALID_START_TIME",
+                    "error": (
+                        "start_time must be a valid ISO-8601 timestamp."
+                    ),
+                }
+            ), 400
+
+    try:
+        forecast_request = ForecastRequest(
+            latitude=latitude,
+            longitude=longitude,
+            horizon_hours=int(
+                horizon_hours
+            ),
+            timestep_minutes=int(
+                timestep_minutes
+            ),
+            start_time=start_time,
+            source=str(
+                source
+            ),
+            grid_margin_degrees=float(
+                grid_margin_degrees
+            ),
+            vector_grid_size=int(
+                vector_grid_size
+            ),
+        )
+
+        result = forecast_drift(
+            forecast_request
+        )
+
+        return jsonify(
+            result
+        ), 200
+
+    except ForecastServiceError as err:
+        return jsonify(
+            {
+                "status": "error",
+                "code": err.code,
+                "error": err.message,
+            }
+        ), err.status_code
+
+    except Exception as err:
+        return jsonify(
+            {
+                "status": "error",
+                "code": "UNEXPECTED_FORECAST_ERROR",
+                "error": str(err),
             }
         ), 500
 

@@ -32,3 +32,5 @@ venv/
 *.sw?
 # Local development artifacts
 dev.pid
+# Forecasting / ocean-data cache
+.cache/

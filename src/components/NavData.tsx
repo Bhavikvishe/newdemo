@@ -103,6 +103,13 @@ export function buildNav(
     },
 
     {
+      id: 'drift',
+      labelKey: 'nav.drift',
+      href: 'drift',
+      icon: IconMap,
+    },
+
+    {
       id: 'alerts',
       labelKey: 'nav.alerts',
       href: 'alerts',
@@ -159,13 +166,13 @@ export function buildNav(
     {
       id: 'intel',
       labelKey: 'nav.intelligence',
-      items: common.slice(0, 5),
+      items: common.slice(0, 6),
     },
 
     {
       id: 'ops',
       labelKey: 'nav.main',
-      items: common.slice(5, 7),
+      items: common.slice(6, 8),
     },
 
     {
