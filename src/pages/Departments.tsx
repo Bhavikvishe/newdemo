@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../lib/store';
 import { makeT } from '../lib/i18n';
 import { DEPARTMENTS, OPERATORS, canonicalDepartmentId } from '../lib/mock';
@@ -6,6 +6,7 @@ import { PageHead, Card, CardHead } from '../lib/ui';
 import { Link } from '../lib/router';
 import { IconUser, IconClock, IconScale } from '../components/Icons';
 import type { DepartmentId } from '../types';
+import { listUsersApi, type DirectoryUser } from '../lib/users';
 
 const ROLE_KEYS: Record<string, string> = {
   'marine-operations': 'dpt.role.marineOps',
@@ -26,9 +27,26 @@ const STEPS = [
 
 export function DepartmentsPage() {
   const store = useStore();
-  const { alerts, detections, language, user, registeredUsers } = store;
+  const { alerts, detections, language, user } = store;
   const t = makeT(language);
   const isAdmin = user?.department === 'system-admin';
+  const [directoryUsers, setDirectoryUsers] = useState<DirectoryUser[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    listUsersApi()
+      .then((users) => {
+        if (!cancelled) setDirectoryUsers(users);
+      })
+      .catch((error) => {
+        console.error('Failed to load personnel directory:', error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const stats = useMemo(() => {
     const s = {} as Record<DepartmentId, { open: number; resolved: number; cases: number; crit: number }>;
@@ -90,7 +108,10 @@ export function DepartmentsPage() {
       <div className="grid cols-12" style={{ gap: 16 }}>
         {DEPARTMENTS.map((d) => {
           const st = stats[d.id];
-          const teammates = [...(OPERATORS[d.id] ?? []), ...registeredUsers.filter((r) => r.department === d.id).map((r) => r.name)];
+          const teammates = [
+            ...(OPERATORS[d.id] ?? []),
+            ...directoryUsers.filter((r) => r.department === d.id).map((r) => r.name),
+          ];
           const capacity = Math.max(3, Math.min(6, teammates.length * 2 || 3));
           const loadPct = Math.round((st.open / capacity) * 100);
           const isOverloaded = d.id !== 'system-admin' && loadPct > 100;

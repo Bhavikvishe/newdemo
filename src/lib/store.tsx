@@ -7,7 +7,6 @@ import type {
   DepartmentId,
   Detection,
   Language,
-  RegisteredUser,
   SessionUser,
   SettingsConfig,
   SignupInput,
@@ -17,27 +16,23 @@ import type {
 import { navigate } from './router';
 import {
   CLASS_META,
-  sessionFor,
   deptById,
   canonicalDepartmentId,
   deptColor,
 } from './mock';
 import { makeT } from './i18n';
 import { clearCachedImages, setCachedImage, getCachedImage } from './detect';
+import { deleteDetectionApi, listDetectionsApi, loginApi, logoutApi, registerApi, me, saveDetectionApi } from './api';
+import { toSessionUser } from './backend-user';
 
 const STORE_KEY = 'anvesha.store.v1';
 
 interface PersistShape {
-  user: SessionUser | null;
   theme: 'dark' | 'light';
   language: Language;
   settings: SettingsConfig;
   onboardingSeen: boolean;
-  detections: Detection[];
-  alerts: Alert[];
-  notifications: AppNotification[];
   tourIntroSeen: boolean;
-  registeredUsers: RegisteredUser[];
   aidHistory?: InterdepartmentalAidRecord[];
 }
 
@@ -66,16 +61,15 @@ function loadPersist(): PersistShape | null {
   try {
     const raw = localStorage.getItem(STORE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as PersistShape;
-    if (!parsed.detections || !Array.isArray(parsed.detections)) return null;
-    // Keep only genuine model detections, filtering out legacy non-real records
-    const real = parsed.detections.filter((d) => d.source === 'upload' && (d.isRealModel || d.id?.startsWith('REAL-') || d.id?.startsWith('BATCH-REAL-')));
-    const kept = new Set(real.map((d) => d.id));
-    parsed.detections = real;
-    parsed.alerts = (parsed.alerts ?? []).filter((a) => kept.has(a.detectionId));
-    parsed.notifications = (parsed.notifications ?? []).filter((n) => !n.detectionId || kept.has(n.detectionId));
-    parsed.aidHistory = parsed.aidHistory ?? [];
-    return parsed;
+    const parsed = JSON.parse(raw) as Partial<PersistShape>;
+    return {
+      theme: parsed.theme === 'light' ? 'light' : 'dark',
+      language: parsed.language ?? 'en',
+      settings: parsed.settings ?? DEFAULT_SETTINGS,
+      onboardingSeen: Boolean(parsed.onboardingSeen),
+      tourIntroSeen: true,
+      aidHistory: parsed.aidHistory ?? [],
+    };
   } catch {
     return null;
   }
@@ -95,15 +89,14 @@ interface StoreApi {
   alerts: Alert[];
   notifications: AppNotification[];
   toasts: ToastItem[];
-  registeredUsers: RegisteredUser[];
   aidHistory: InterdepartmentalAidRecord[];
-  login: (username: string, dept: DepartmentId, password?: string) => boolean;
-  register: (input: SignupInput) => { ok: boolean; error?: string };
+  login: (username: string, dept: DepartmentId, password?: string, remember?: boolean) => Promise<boolean>;
+  register: (input: SignupInput) => Promise<{ ok: boolean; error?: string }>;
   assignTask: (alertId: string, department: DepartmentId, operator: string) => void;
   interdepartmentalTransfer: (alertId: string, fromDept: DepartmentId, toDept: DepartmentId, targetOperator: string, reason: string) => boolean;
   requestInterdepartmentalAid: (dept: DepartmentId, note?: string) => void;
   seedSurgeScenario: () => void;
-  logout: () => void;
+  logout: () => Promise<void>;
   setTheme: (t: 'dark' | 'light') => void;
   setLanguage: (l: Language) => void;
   updateSettings: (patch: Partial<SettingsConfig>) => void;
@@ -128,7 +121,7 @@ interface StoreApi {
   openTour: () => void;
   closeTour: () => void;
   clearAll: () => void;
-  clearDetectionHistory: () => void;
+  clearDetectionHistory: () => Promise<void>;
 }
 
 const Ctx = createContext<StoreApi | null>(null);
@@ -140,33 +133,27 @@ function applySettingsMerge(current: SettingsConfig, patch: Partial<SettingsConf
 export function StoreProvider({ children }: { children: ReactNode }) {
   const persisted = useRef<PersistShape | null>(loadPersist());
 
-  const [user, setUser] = useState<SessionUser | null>(persisted.current?.user ?? null);
+  const [user, setUser] = useState<SessionUser | null>(null);
   const [theme, setTheme] = useState<'dark' | 'light'>(persisted.current?.theme ?? 'dark');
   const [language, setLanguage] = useState<Language>(persisted.current?.language ?? 'en');
   const [settings, setSettings] = useState<SettingsConfig>(persisted.current?.settings ?? DEFAULT_SETTINGS);
   const [onboardingSeen, setOnboardingSeen] = useState(persisted.current?.onboardingSeen ?? false);
   const [tourOpen, setTourOpen] = useState(false);
-  const [detections, setDetections] = useState<Detection[]>(persisted.current?.detections ?? []);
-  const [alerts, setAlerts] = useState<Alert[]>(persisted.current?.alerts ?? []);
-  const [notifications, setNotifications] = useState<AppNotification[]>(persisted.current?.notifications ?? []);
+  const [detections, setDetections] = useState<Detection[]>([]);
+  const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [toasts, setToasts] = useState<ToastItem[]>([]);
-  const [registeredUsers, setRegisteredUsers] = useState<RegisteredUser[]>(persisted.current?.registeredUsers ?? []);
   const [aidHistory, setAidHistory] = useState<InterdepartmentalAidRecord[]>(persisted.current?.aidHistory ?? []);
 
   const t = makeT(language);
 
   const save = useCallback(() => {
     const shape: PersistShape = {
-      user,
       theme,
       language,
       settings,
       onboardingSeen,
-      detections,
-      alerts,
-      notifications,
       tourIntroSeen: true,
-      registeredUsers,
       aidHistory,
     };
     try {
@@ -174,7 +161,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     } catch {
       /* storage unavailable */
     }
-  }, [user, theme, language, settings, onboardingSeen, detections, alerts, notifications, registeredUsers, aidHistory]);
+  }, [theme, language, settings, onboardingSeen, aidHistory]);
 
   useEffect(() => {
     save();
@@ -221,6 +208,44 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     window.setTimeout(() => dismissToast(id), 9000);
   }, [dismissToast]);
 
+  useEffect(() => {
+    let cancelled = false;
+    me()
+      .then((result) => {
+        if (!cancelled && result.authenticated && result.user) {
+          setUser(toSessionUser(result.user));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setUser(null);
+      });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setDetections([]);
+      return;
+    }
+    let cancelled = false;
+    listDetectionsApi()
+      .then(({ detections: rows }) => {
+        if (!cancelled) setDetections(rows);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          addToast({
+            kind: 'alert',
+            title: 'Detection history unavailable',
+            text: error instanceof Error ? error.message : 'Could not load detections.',
+          });
+        }
+      });
+    return () => { cancelled = true; };
+  }, [user?.username, addToast]);
+
+
+
   const pushNotification = useCallback((n: Omit<AppNotification, 'id' | 'ts' | 'unread'>) => {
     notifCounter += 1;
     const item: AppNotification = { ...n, id: `ntf-${notifCounter}`, ts: new Date().toISOString(), unread: true };
@@ -228,68 +253,77 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return item;
   }, []);
 
-  const login = useCallback((username: string, dept: DepartmentId, password = '') => {
-    const account = registeredUsers.find(
-      (r) => r.username.toLowerCase() === username.trim().toLowerCase() || r.email.toLowerCase() === username.trim().toLowerCase(),
-    );
-    if (account) {
-      if (account.department !== dept) {
-        addToast({ kind: 'alert', title: t('stx.loginRejected'), text: t('stx.loginRejectedText', { dept: deptName(account.department) }) });
-        return false;
+  const login = useCallback(async (username: string, dept: DepartmentId, password = '', remember = true) => {
+    try {
+      const result = await loginApi(username, password, dept, remember);
+      setUser(toSessionUser(result.user));
+      setDetections([]);
+      try {
+        const history = await listDetectionsApi();
+        setDetections(history.detections);
+      } catch {
+        // Login succeeded even if history hydration fails.
       }
-      if (account.password !== password) {
-        addToast({ kind: 'alert', title: t('stx.invalidCredentials'), text: t('stx.invalidCredentialsText') });
-        return false;
-      }
+      navigate('overview');
+      addToast({ kind: 'success', title: t('stx.authSuccess'), text: t('stx.authSuccessText') });
+      return true;
+    } catch (error) {
+      addToast({
+        kind: 'alert',
+        title: t('stx.invalidCredentials'),
+        text: error instanceof Error ? error.message : 'Authentication failed.',
+      });
+      return false;
     }
-    setUser(sessionFor(dept, account ? account.username : username));
-    navigate('overview');
-    addToast({ kind: 'success', title: t('stx.authSuccess'), text: t('stx.authSuccessText') });
-    return true;
-  }, [registeredUsers, addToast, language]);
-
-  const register = useCallback((input: SignupInput) => {
-    const name = input.name.trim();
-    const email = input.email.trim();
-    const username = input.username.trim();
-    if (!name || !email || !username || !input.password) {
-      return { ok: false, error: t('stx.allFieldsRequired') };
-    }
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-      return { ok: false, error: t('stx.invalidEmail') };
-    }
-    if (input.password.length < 6) {
-      return { ok: false, error: t('stx.passwordTooShort') };
-    }
-    if (registeredUsers.some((r) => r.username.toLowerCase() === username.toLowerCase())) {
-      return { ok: false, error: t('stx.usernameTaken') };
-    }
-    if (registeredUsers.some((r) => r.email.toLowerCase() === email.toLowerCase())) {
-      return { ok: false, error: t('stx.emailExists') };
-    }
-    const account: RegisteredUser = {
-      id: `usr-${Date.now()}`,
-      name,
-      email,
-      username,
-      password: input.password,
-      department: input.department,
-      role: input.department === 'system-admin' ? 'admin' : 'operator',
-      createdAt: new Date().toISOString(),
-    };
-    setRegisteredUsers((rs) => [...rs, account]);
-    addToast({ kind: 'success', title: t('stx.accountCreated'), text: t('stx.accountCreatedText', { name, dept: deptName(input.department) }) });
-    return { ok: true };
-  }, [registeredUsers, addToast, language]);
-
-  const logout = useCallback(() => {
-    localStorage.removeItem(STORE_KEY);
-    setUser(null);
-    navigate('login');
-    addToast({ kind: 'info', title: t('stx.sessionEnded'), text: t('stx.sessionEndedText') });
   }, [addToast, language]);
 
-  const recordDetection = useCallback((det: Detection, opts: { silent?: boolean } = {}) => {
+  const register = useCallback(async (input: SignupInput) => {
+    try {
+      const result = await registerApi(input);
+      setUser(toSessionUser(result.user));
+      setDetections([]);
+      navigate('overview');
+      addToast({
+        kind: 'success',
+        title: t('stx.accountCreated'),
+        text: t('stx.accountCreatedText', { name: input.name, dept: deptName(input.department) }),
+      });
+      return { ok: true };
+    } catch (error) {
+      return {
+        ok: false,
+        error: error instanceof Error ? error.message : t('lgn.regFailed'),
+      };
+    }
+  }, [addToast, language]);
+
+  const logout = useCallback(async () => {
+    try {
+      await logoutApi();
+    } finally {
+      setUser(null);
+      setDetections([]);
+      setAlerts([]);
+      setNotifications([]);
+      setAidHistory([]);
+      navigate('login');
+      addToast({ kind: 'info', title: t('stx.sessionEnded'), text: t('stx.sessionEndedText') });
+    }
+  }, [addToast, language]);
+
+  const recordDetection = useCallback(async (det: Detection, opts: { silent?: boolean } = {}) => {
+    try {
+      await saveDetectionApi(det);
+    } catch (error) {
+      console.error('Failed to persist detection to PostgreSQL:', error);
+      addToast({
+        kind: 'critical',
+        title: 'Detection save failed',
+        text: error instanceof Error ? error.message : 'The detection could not be saved to the database.',
+      });
+      return;
+    }
+
     const meta = CLASS_META[det.className];
     const isHuman = det.className === 'human';
     const isMarine = meta.category === 'marine-life';
@@ -851,30 +885,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     window.location.reload();
   }, []);
 
-  const clearDetectionHistory = useCallback(() => {
-    setDetections([]);
-    setAlerts([]);
-    setAidHistory([]);
-    clearCachedImages();
+  const clearDetectionHistory = useCallback(async () => {
+    const ids = detections.map((d) => d.id);
     try {
-      const raw = localStorage.getItem(STORE_KEY);
-      if (raw) {
-        const parsed = JSON.parse(raw) as PersistShape;
-        parsed.detections = [];
-        parsed.alerts = [];
-        parsed.aidHistory = [];
-        parsed.notifications = [];
-        localStorage.setItem(STORE_KEY, JSON.stringify(parsed));
-      }
-    } catch {
-      // ignore
+      await Promise.all(ids.map((id) => deleteDetectionApi(id)));
+      setDetections([]);
+      setAlerts([]);
+      setAidHistory([]);
+      clearCachedImages();
+      addToast({
+        kind: 'success',
+        title: 'Detection History Cleared',
+        text: 'All detection records and associated alerts have been cleared.',
+      });
+    } catch (error) {
+      addToast({
+        kind: 'alert',
+        title: 'Could not clear detection history',
+        text: error instanceof Error ? error.message : 'Some records could not be deleted.',
+      });
     }
-    addToast({
-      kind: 'success',
-      title: 'Detection History Cleared',
-      text: 'All detection records and associated alerts have been cleared.',
-    });
-  }, [addToast]);
+  }, [detections, addToast]);
 
   const api = useMemo<StoreApi>(() => ({
     user,
@@ -887,7 +918,6 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     alerts,
     notifications,
     toasts,
-    registeredUsers,
     aidHistory,
     login,
     register,
@@ -921,7 +951,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     closeTour,
     clearAll,
     clearDetectionHistory,
-  }), [user, theme, language, settings, onboardingSeen, tourOpen, detections, alerts, notifications, toasts, registeredUsers, aidHistory, login, register, assignTask, interdepartmentalTransfer, requestInterdepartmentalAid, seedSurgeScenario, logout, setTheme, setLanguage, updateSettings, saveSettings, resetSettings, addToast, dismissToast, dismissNotification, markNotificationsRead, recordDetection, acknowledgeAlert, assignOperator, requestVerification, acceptCase, setAlertStatus, requestEquipment, addNote, escalateAlert, resolveAlert, verifyAlert, completeOnboarding, openTour, closeTour, clearAll, clearDetectionHistory]);
+  }), [user, theme, language, settings, onboardingSeen, tourOpen, detections, alerts, notifications, toasts, aidHistory, login, register, assignTask, interdepartmentalTransfer, requestInterdepartmentalAid, seedSurgeScenario, logout, setTheme, setLanguage, updateSettings, saveSettings, resetSettings, addToast, dismissToast, dismissNotification, markNotificationsRead, recordDetection, acknowledgeAlert, assignOperator, requestVerification, acceptCase, setAlertStatus, requestEquipment, addNote, escalateAlert, resolveAlert, verifyAlert, completeOnboarding, openTour, closeTour, clearAll, clearDetectionHistory]);
 
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
 }

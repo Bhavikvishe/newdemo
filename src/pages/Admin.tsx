@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../lib/store';
 import { makeT } from '../lib/i18n';
 import { DEPARTMENTS, OPERATORS, canonicalDepartmentId, deptById, fmtDT, remTime } from '../lib/mock';
@@ -7,6 +7,7 @@ import { PageHead, Card, CardHead, Button, Select, RiskBadge, EmptyState } from 
 import { Link } from '../lib/router';
 import { IconUser, IconCheck, IconDoc, IconClock, IconHelm, IconScale, IconRescue } from '../components/Icons';
 import type { Alert, DepartmentId, Language, DepartmentWorkloadInfo } from '../types';
+import { listUsersApi, type DirectoryUser } from '../lib/users';
 
 const OPEN = ['new', 'unacknowledged', 'pending', 'assigned', 'in_progress', 'manual_verification', 'overdue', 'escalated'];
 
@@ -18,10 +19,27 @@ const OPERATIONAL_DEPTS: DepartmentId[] = [
 
 export function AdminPage() {
   const store = useStore();
-  const { alerts, registeredUsers, language, aidHistory } = store;
+  const { alerts, language, aidHistory } = store;
   const t = makeT(language);
 
   const [filter, setFilter] = useState<'all' | 'assigned' | 'unassigned' | 'overdue' | 'aided'>('all');
+  const [directoryUsers, setDirectoryUsers] = useState<DirectoryUser[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    listUsersApi()
+      .then((users) => {
+        if (!cancelled) setDirectoryUsers(users);
+      })
+      .catch((error) => {
+        console.error('Failed to load personnel directory:', error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // Unified assignment / transfer state
   const [taskId, setTaskId] = useState('');
@@ -46,7 +64,10 @@ export function AdminPage() {
       const inProg = dAlerts.filter((a) => a.status === 'in_progress').length;
       const crit = dAlerts.filter((a) => a.detection.riskLevel === 'critical').length;
       const od = dAlerts.filter((a) => a.status === 'overdue').length;
-      const rosterList = [...(OPERATORS[dId] ?? []), ...registeredUsers.filter((r) => r.department === dId).map((r) => r.name)];
+      const rosterList = [
+        ...(OPERATORS[dId] ?? []),
+        ...directoryUsers.filter((r) => r.department === dId).map((r) => r.name),
+      ];
       const capacity = Math.max(3, Math.min(6, rosterList.length * 2 || 3));
       const loadPct = Math.round((dAlerts.length / capacity) * 100);
       const status: 'optimal' | 'elevated' | 'overloaded' =
@@ -68,17 +89,22 @@ export function AdminPage() {
         requiresHelp: status === 'overloaded' || dAlerts.length >= 4,
       };
     });
-  }, [openAlerts, registeredUsers]);
+  }, [openAlerts, directoryUsers]);
 
   const overloadedDepts = useMemo(() => deptWorkloads.filter((d) => d.status === 'overloaded'), [deptWorkloads]);
 
   // Target Department Roster
   const roster = useMemo(() => {
     const base = OPERATORS[dept] ?? [];
-    const reg = registeredUsers.filter((r) => canonicalDepartmentId(r.department) === canonicalDepartmentId(dept)).map((r) => r.name);
-    const seen = new Set<string>();
-    return [...base, ...reg].filter((n) => (seen.has(n) ? false : (seen.add(n), true)));
-  }, [dept, registeredUsers]);
+    const reg = directoryUsers
+      .filter(
+        (r) =>
+          canonicalDepartmentId(r.department as DepartmentId) ===
+          canonicalDepartmentId(dept)
+      )
+      .map((r) => r.name);
+    return [...new Set([...base, ...reg])];
+  }, [dept, directoryUsers]);
 
   // Unified Assign or Transfer Handler
   const handleAssignOrReassign = () => {

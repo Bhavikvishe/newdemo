@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '../lib/store';
 import { makeT } from '../lib/i18n';
 import { deptById, fmtDT, remTime, OPERATORS } from '../lib/mock';
@@ -9,6 +9,7 @@ import { PageHead, Card, CardHead, Button, RiskBadge, Select, EmptyState } from 
 import { Link } from '../lib/router';
 import { IconUser, IconCheck, IconDoc } from '../components/Icons';
 import type { Alert } from '../types';
+import { listUsersApi, type DirectoryUser } from '../lib/users';
 
 const OPEN = ['new', 'unacknowledged', 'pending', 'assigned', 'in_progress', 'manual_verification', 'overdue', 'escalated'];
 
@@ -24,12 +25,34 @@ const EQUIPMENT: Record<string, string[]> = {
 
 export function MyDepartmentPage() {
   const store = useStore();
-  const { user, alerts, language, registeredUsers } = store;
+  const { user, alerts, language } = store;
   const t = makeT(language);
   const me = user?.department ?? 'marine-operations';
   const [status, setStatus] = useState('open');
   const [operator, setOperator] = useState('');
   const [opAlert, setOpAlert] = useState<Alert | null>(null);
+  const [directoryUsers, setDirectoryUsers] = useState<DirectoryUser[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!user) {
+      setDirectoryUsers([]);
+      return;
+    }
+
+    listUsersApi()
+      .then((users) => {
+        if (!cancelled) setDirectoryUsers(users);
+      })
+      .catch((error) => {
+        console.error('Failed to load personnel directory:', error);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   const view = useMemo(
     () =>
@@ -47,10 +70,9 @@ export function MyDepartmentPage() {
 
   const roster = useMemo(() => {
     const base = OPERATORS[me] ?? [];
-    const reg = registeredUsers.filter((r) => r.department === me).map((r) => r.name);
-    const seen = new Set<string>();
-    return [...base, ...reg].filter((n) => (seen.has(n) ? false : (seen.add(n), true)));
-  }, [me, registeredUsers]);
+    const reg = directoryUsers.filter((r) => r.department === me).map((r) => r.name);
+    return [...new Set([...base, ...reg])];
+  }, [me, directoryUsers]);
 
   // Workload and capacity metrics
   const capacity = Math.max(3, Math.min(6, roster.length * 2 || 3));

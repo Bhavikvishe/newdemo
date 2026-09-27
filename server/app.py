@@ -3,7 +3,7 @@
 Run from the project root:
 
     pip install -r server/requirements.txt
-    python server/app.py
+    python -m server.app
 
 Existing endpoints:
 
@@ -18,6 +18,8 @@ Drift forecasting:
 
 from __future__ import annotations
 
+import os
+
 from datetime import datetime, timezone
 
 from flask import Flask, jsonify, request
@@ -31,6 +33,10 @@ try:
         ForecastServiceError,
     )
     from .forecasting.forecast_service import forecast_drift
+    from .auth import close_request_db
+    from .auth_routes import auth_bp
+    from .detection_routes import detection_bp
+    from .users_routes import users_bp
 except ImportError:
     import model
     import gebco
@@ -40,11 +46,25 @@ except ImportError:
         ForecastServiceError,
     )
     from forecasting.forecast_service import forecast_drift
+    from auth import close_request_db
+    from auth_routes import auth_bp
+    from detection_routes import detection_bp
+    from users_routes import users_bp
 
 
 app = Flask(__name__)
 
-CORS(app)
+app.register_blueprint(users_bp)
+frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:5173")
+CORS(app, origins=[frontend_origin], supports_credentials=True)
+
+app.register_blueprint(auth_bp)
+app.register_blueprint(detection_bp)
+
+
+@app.teardown_appcontext
+def close_db(_exc=None):
+    close_request_db()
 
 
 @app.post("/api/detect")
@@ -374,6 +394,6 @@ def drift_forecast():
 if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
-        port=5000,
-        debug=True,
+        port=int(os.getenv("PORT", "5000")),
+        debug=os.getenv("FLASK_DEBUG", "true").lower() in {"1", "true", "yes"},
     )

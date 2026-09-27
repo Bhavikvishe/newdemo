@@ -42,35 +42,36 @@ export function LoginPage() {
   const [failed, setFailed] = useState(false);
   const [regError, setRegError] = useState('');
 
-  const doLogin = () => {
+  const doLogin = async () => {
     setBusy(true);
     setFailed(false);
-    window.setTimeout(() => {
-      setBusy(false);
-      if (!username.trim()) {
+    try {
+      if (!username.trim() || !password) {
         setFailed(true);
         return;
       }
-      const ok = login(username, dept, password);
+      const ok = await login(username, dept, password, remember);
       if (!ok) setFailed(true);
-    }, 700);
+    } finally {
+      setBusy(false);
+    }
   };
 
-  const doRegister = () => {
+  const doRegister = async () => {
     setBusy(true);
     setFailed(false);
     setRegError('');
-    const res = register({ name: rName, email: rEmail, username: rUsername, password: rPassword, department: rDept });
-    if (!res.ok) {
-      setRegError(res.error ?? t('lgn.regFailed'));
+    try {
+      const res = await register({ name: rName, email: rEmail, username: rUsername, password: rPassword, department: rDept });
+      if (!res.ok) {
+        setRegError(res.error ?? t('lgn.regFailed'));
+      }
+    } finally {
       setBusy(false);
-      return;
     }
-    window.setTimeout(() => {
-      setBusy(false);
-      login(rUsername, rDept, rPassword);
-    }, 500);
   };
+
+  const registrationDepartments = DEPARTMENTS.filter((d) => d.id !== 'system-admin');
 
   const switchMode = (m: Mode) => {
     setMode(m);
@@ -216,7 +217,7 @@ export function LoginPage() {
                 <div className="field" style={{ marginBottom: 18 }}>
                   <label>{t('login.dep')}</label>
                   <select className="select" value={rDept} onChange={(e) => setRDept(e.target.value as DepartmentId)}>
-                    {DEPARTMENTS.map((d) => (
+                    {registrationDepartments.map((d) => (
                       <option key={d.id} value={d.id}>{t(DEPT_KEY[d.id])}</option>
                     ))}
                   </select>
