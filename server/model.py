@@ -14,6 +14,10 @@ Detection pipeline:
           ↓
     YOLO inference
           ↓
+    Acoustic-shadow validation
+          ↓
+    Confidence fusion
+          ↓
     Detection results
 
 GPS is ALWAYS extracted from the original image.
@@ -36,6 +40,11 @@ try:
     from .image_preprocessing import preprocess_sonar_image
 except ImportError:
     from image_preprocessing import preprocess_sonar_image
+
+try:
+    from .acoustic_shadow import analyze_acoustic_shadow
+except ImportError:
+    from acoustic_shadow import analyze_acoustic_shadow
 
 
 SERVER_DIR = Path(__file__).resolve().parent
@@ -200,6 +209,7 @@ def get_model_info() -> dict:
             DEFAULT_IOU,
         "default_imgsz":
             DEFAULT_IMAGE_SIZE,
+
         "preprocessing": {
             "enabled": True,
             "method": (
@@ -224,6 +234,20 @@ def get_model_info() -> dict:
                 ],
             },
         },
+
+        "acoustic_validation": {
+            "enabled": True,
+            "method": (
+                "bilateral acoustic-shadow analysis "
+                "+ target/background contrast"
+            ),
+            "fusion": {
+                "yolo_weight": 0.75,
+                "acoustic_weight": 0.25,
+            },
+            "rejection_enabled": False,
+        },
+
         "debug":
             DEBUG_DETECTION,
     }
@@ -454,6 +478,10 @@ def detect(
     GPS is extracted from the original image before any preprocessing.
 
     YOLO receives the OpenCV-denoised and contrast-enhanced image.
+
+    Acoustic-shadow validation is performed on the ORIGINAL oriented
+    sonar image so that denoising/CLAHE does not artificially create
+    or destroy shadow characteristics.
     """
 
     start_t = time.perf_counter()
@@ -516,7 +544,9 @@ def detect(
         )
     )
 
-    orig_w, orig_h = oriented_pil.size
+    orig_w, orig_h = (
+        oriented_pil.size
+    )
 
     # ---------------------------------------------------------------
     # 3. Convert PIL → OpenCV BGR.
@@ -528,8 +558,6 @@ def detect(
 
     # ---------------------------------------------------------------
     # 4. OpenCV sonar preprocessing.
-    #
-    # Based on the reference sonar pipeline:
     #
     # BGR
     #  ↓
@@ -544,14 +572,16 @@ def detect(
     # LAB
     #  ↓
     # BGR
-    #
-    # Image dimensions are preserved.
     # ---------------------------------------------------------------
 
-    preprocessing_start = time.perf_counter()
+    preprocessing_start = (
+        time.perf_counter()
+    )
 
-    processed_bgr = preprocess_sonar_image(
-        original_bgr,
+    processed_bgr = (
+        preprocess_sonar_image(
+            original_bgr,
+        )
     )
 
     preprocessing_time_ms = round(
@@ -565,8 +595,6 @@ def detect(
 
     # ---------------------------------------------------------------
     # 5. Convert processed BGR → PIL RGB.
-    #
-    # Ultralytics can then receive the processed PIL image directly.
     # ---------------------------------------------------------------
 
     processed_pil = _bgr_to_pil(
@@ -577,7 +605,9 @@ def detect(
     # 6. YOLO inference.
     # ---------------------------------------------------------------
 
-    inference_start = time.perf_counter()
+    inference_start = (
+        time.perf_counter()
+    )
 
     results = model.predict(
         source=processed_pil,
@@ -601,6 +631,10 @@ def detect(
     r = results[0]
 
     out = []
+
+    # ---------------------------------------------------------------
+    # 7. Detection + acoustic validation.
+    # ---------------------------------------------------------------
 
     for box in r.boxes:
         c = float(
@@ -628,6 +662,141 @@ def detect(
             .tolist()
         )
 
+        normalized_bbox = {
+            "x":
+                round(
+                    x1 / orig_w,
+                    4,
+                ),
+
+            "y":
+                round(
+                    y1 / orig_h,
+                    4,
+                ),
+
+            "width":
+                round(
+                    (x2 - x1)
+                    / orig_w,
+                    4,
+                ),
+
+            "height":
+                round(
+                    (y2 - y1)
+                    / orig_h,
+                    4,
+                ),
+        }
+
+        # -----------------------------------------------------------
+        # Acoustic-shadow analysis.
+        #
+        # Use ORIGINAL sonar pixels rather than processed pixels.
+        # -----------------------------------------------------------
+
+        try:
+            acoustic_validation = (
+                analyze_acoustic_shadow(
+                    original_bgr,
+                    normalized_bbox,
+                )
+            )
+
+        except Exception as exc:
+            # Acoustic validation must never break the main
+            # YOLO detection pipeline.
+            acoustic_validation = {
+                "shadow_detected":
+                    False,
+
+                "shadow_direction":
+                    None,
+
+                "shadow_score":
+                    0.0,
+
+                "shadow_darkness":
+                    0.0,
+
+                "shadow_dark_fraction":
+                    0.0,
+
+                "shadow_alignment":
+                    0.0,
+
+                "target_contrast":
+                    0.0,
+
+                "acoustic_score":
+                    0.0,
+
+                "error":
+                    str(exc),
+            }
+
+        acoustic_score = float(
+            acoustic_validation.get(
+                "acoustic_score",
+                0.0,
+            )
+        )
+
+        acoustic_score = max(
+            0.0,
+            min(
+                1.0,
+                acoustic_score,
+            ),
+        )
+
+        # -----------------------------------------------------------
+        # Confidence fusion.
+        #
+        # IMPORTANT:
+        # `confidence` remains the ORIGINAL YOLO confidence.
+        #
+        # `final_confidence` is the additional acoustic-aware
+        # validation score.
+        #
+        # We are NOT rejecting detections yet.
+        # -----------------------------------------------------------
+
+        final_confidence = (
+            0.75 * c
+            + 0.25
+            * acoustic_score
+        )
+
+        final_confidence = max(
+            0.0,
+            min(
+                1.0,
+                final_confidence,
+            ),
+        )
+
+        # -----------------------------------------------------------
+        # False-positive risk.
+        #
+        # This is currently a REVIEW signal.
+        # It is NOT used to reject detections.
+        # -----------------------------------------------------------
+
+        false_positive_risk = max(
+            0.0,
+            min(
+                1.0,
+                1.0
+                - (
+                    0.65 * c
+                    + 0.35
+                    * acoustic_score
+                ),
+            ),
+        )
+
         out.append(
             {
                 "class_id":
@@ -636,36 +805,33 @@ def detect(
                 "label":
                     label,
 
+                # ORIGINAL YOLO CONFIDENCE
                 "confidence":
                     round(
                         c,
                         4,
                     ),
 
-                "bbox": {
-                    "x":
-                        round(
-                            x1 / orig_w,
-                            4,
-                        ),
-                    "y":
-                        round(
-                            y1 / orig_h,
-                            4,
-                        ),
-                    "width":
-                        round(
-                            (x2 - x1)
-                            / orig_w,
-                            4,
-                        ),
-                    "height":
-                        round(
-                            (y2 - y1)
-                            / orig_h,
-                            4,
-                        ),
-                },
+                # ACOUSTIC-AWARE FUSED CONFIDENCE
+                "final_confidence":
+                    round(
+                        final_confidence,
+                        4,
+                    ),
+
+                # Acoustic evidence
+                "acoustic_validation":
+                    acoustic_validation,
+
+                # Review-only signal
+                "false_positive_risk":
+                    round(
+                        false_positive_risk,
+                        4,
+                    ),
+
+                "bbox":
+                    normalized_bbox,
 
                 "raw_bbox": {
                     "x1":
@@ -673,16 +839,19 @@ def detect(
                             x1,
                             1,
                         ),
+
                     "y1":
                         round(
                             y1,
                             1,
                         ),
+
                     "x2":
                         round(
                             x2,
                             1,
                         ),
+
                     "y2":
                         round(
                             y2,
@@ -692,11 +861,17 @@ def detect(
             }
         )
 
+    # Sort by acoustic-aware confidence while retaining the original
+    # YOLO confidence in every prediction.
     out.sort(
         key=lambda p:
-        p["confidence"],
+        p["final_confidence"],
         reverse=True,
     )
+
+    # ---------------------------------------------------------------
+    # 8. Timing.
+    # ---------------------------------------------------------------
 
     elapsed_ms = round(
         (
@@ -707,6 +882,10 @@ def detect(
         2,
     )
 
+    # ---------------------------------------------------------------
+    # 9. API response.
+    # ---------------------------------------------------------------
+
     response = {
         "predictions":
             out,
@@ -715,7 +894,41 @@ def detect(
             gps,
     }
 
+    # ---------------------------------------------------------------
+    # 10. Debug information.
+    # ---------------------------------------------------------------
+
     if debug_mode:
+        model_names = getattr(
+            model,
+            "names",
+            {},
+        )
+
+        if isinstance(
+            model_names,
+            dict,
+        ):
+            debug_classes = {
+                int(k): str(v)
+                for k, v in
+                model_names.items()
+            }
+
+        elif isinstance(
+            model_names,
+            (list, tuple),
+        ):
+            debug_classes = {
+                i: str(v)
+                for i, v in enumerate(
+                    model_names
+                )
+            }
+
+        else:
+            debug_classes = {}
+
         response[
             "debug"
         ] = {
@@ -724,15 +937,8 @@ def detect(
                     _weights_path,
                 ),
 
-            "classes": {
-                int(k): str(v)
-                for k, v in
-                getattr(
-                    model,
-                    "names",
-                    {},
-                ).items()
-            },
+            "classes":
+                debug_classes,
 
             "input_shape": [
                 orig_w,
@@ -776,14 +982,34 @@ def detect(
                 "clahe_clip_limit":
                     2.0,
 
-                "clahe_tile_grid":
-                    [
-                        8,
-                        8,
-                    ],
+                "clahe_tile_grid": [
+                    8,
+                    8,
+                ],
 
                 "time_ms":
                     preprocessing_time_ms,
+            },
+
+            "acoustic_validation": {
+                "enabled":
+                    True,
+
+                "method":
+                    (
+                        "bilateral acoustic-shadow "
+                        "analysis + "
+                        "target/background contrast"
+                    ),
+
+                "yolo_weight":
+                    0.75,
+
+                "acoustic_weight":
+                    0.25,
+
+                "rejection_enabled":
+                    False,
             },
 
             "inference_time_ms":

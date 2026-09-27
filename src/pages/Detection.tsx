@@ -172,6 +172,9 @@ export function DetectionPage() {
           class_id: pr.class_id,
           label: pr.label,
           confidence: pr.confidence,
+          final_confidence: pr.final_confidence,
+          acoustic_validation: pr.acoustic_validation,
+          false_positive_risk: pr.false_positive_risk,
           bbox: { ...pr.bbox, normalized: true },
           raw_bbox: pr.raw_bbox,
         })),
@@ -645,6 +648,118 @@ export function DetectionPage() {
                   <Tag kind="rule">Conf Threshold: {confThreshold.toFixed(2)}</Tag>
                 </div>
 
+                {allDetections[selectedPredIdx]?.acoustic_validation && (
+                  <div
+                    style={{
+                      marginBottom: 14,
+                      padding: 12,
+                      borderRadius: 8,
+                      background: 'var(--ink-4)',
+                      border: '1px solid var(--border)',
+                    }}
+                  >
+                    <div
+                      className="tiny upper muted"
+                      style={{ marginBottom: 10, fontWeight: 700 }}
+                    >
+                      ACOUSTIC-SHADOW VALIDATION
+                    </div>
+
+                    <div className="grid cols-12" style={{ gap: 8 }}>
+                      <div className="span-3">
+                        <Kv
+                          k="ACOUSTIC SCORE"
+                          v={
+                            <b className="mono">
+                              {(
+                                (allDetections[selectedPredIdx]
+                                  .acoustic_validation?.acoustic_score ?? 0) * 100
+                              ).toFixed(1)}%
+                            </b>
+                          }
+                        />
+                      </div>
+
+                      <div className="span-3">
+                        <Kv
+                          k="SHADOW"
+                          v={
+                            <b className="mono">
+                              {allDetections[selectedPredIdx].acoustic_validation?.shadow_detected
+                                ? 'DETECTED'
+                                : 'NOT DETECTED'}
+                            </b>
+                          }
+                        />
+                      </div>
+
+                      <div className="span-3">
+                        <Kv
+                          k="DIRECTION"
+                          v={
+                            <b className="mono">
+                              {allDetections[selectedPredIdx].acoustic_validation?.shadow_direction ?? '—'}
+                            </b>
+                          }
+                        />
+                      </div>
+
+                      <div className="span-3">
+                        <Kv
+                          k="FP RISK"
+                          v={
+                            <b className="mono">
+                              {(
+                                (allDetections[selectedPredIdx].false_positive_risk ?? 0) * 100
+                              ).toFixed(1)}%
+                            </b>
+                          }
+                        />
+                      </div>
+
+                      <div className="span-4">
+                        <Kv
+                          k="SHADOW SCORE"
+                          v={
+                            <span className="mono">
+                              {(
+                                (allDetections[selectedPredIdx].acoustic_validation?.shadow_score ?? 0) * 100
+                              ).toFixed(1)}%
+                            </span>
+                          }
+                        />
+                      </div>
+
+                      <div className="span-4">
+                        <Kv
+                          k="TARGET CONTRAST"
+                          v={
+                            <span className="mono">
+                              {(
+                                (allDetections[selectedPredIdx].acoustic_validation?.target_contrast ?? 0) * 100
+                              ).toFixed(1)}%
+                            </span>
+                          }
+                        />
+                      </div>
+
+                      <div className="span-4">
+                        <Kv
+                          k="FINAL CONFIDENCE"
+                          v={
+                            <span className="mono">
+                              {(
+                                (allDetections[selectedPredIdx].final_confidence ??
+                                  allDetections[selectedPredIdx].confidence) * 100
+                              ).toFixed(1)}%
+                            </span>
+                          }
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {/* Multi-object selection switcher */}
                 {allDetections.length > 1 && (
                   <div style={{ marginBottom: 14, background: 'var(--ink-4)', padding: 12, borderRadius: 8 }}>
@@ -671,7 +786,14 @@ export function DetectionPage() {
                         >
                           <span className="mono" style={{ opacity: 0.8 }}>#{idx + 1}</span>
                           <b>{p.label}</b>
-                          <span className="mono" style={{ opacity: 0.9 }}>{(p.confidence * 100).toFixed(1)}%</span>
+                          <span className="mono" style={{ opacity: 0.9 }}>
+                            {(p.confidence * 100).toFixed(1)}%
+                          </span>
+                          {p.final_confidence != null && (
+                            <span className="mono" style={{ opacity: 0.7 }}>
+                              → {(p.final_confidence * 100).toFixed(1)}%
+                            </span>
+                          )}
                         </button>
                       ))}
                     </div>
@@ -786,7 +908,7 @@ export function DetectionPage() {
               {/* SECTION 3: DEBUG TELEMETRY (if available) */}
               {debugInfo && (
                 <Card>
-                  <CardHead kt="DEBUG TELEMETRY" title="YOLO Diagnostics" />
+                  <CardHead kt="DEBUG TELEMETRY" title="Inference & Acoustic Diagnostics" />
                   <div className="grid cols-12" style={{ gap: 8, fontSize: 12 }}>
                     <div className="span-6">
                       <Kv k="MODEL PATH" v={<span className="mono" style={{ fontSize: 11 }}>{debugInfo.model_path}</span>} />

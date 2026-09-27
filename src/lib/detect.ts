@@ -1,9 +1,24 @@
 import type { DetectionClass } from '../types';
 
+export interface AcousticValidation {
+  shadow_detected: boolean;
+  shadow_direction: 'left' | 'right' | null;
+  shadow_score: number;
+  shadow_darkness: number;
+  shadow_dark_fraction: number;
+  shadow_alignment: number;
+  target_contrast: number;
+  acoustic_score: number;
+  error?: string;
+}
+
 export interface ModelPrediction {
   class_id?: number;
   label: string;
   confidence: number;
+  final_confidence?: number;
+  acoustic_validation?: AcousticValidation;
+  false_positive_risk?: number;
   bbox: {
     x: number;
     y: number;
