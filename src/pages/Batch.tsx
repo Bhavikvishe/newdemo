@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent } from 'react';
 import { useStore } from '../lib/store';
+import { saveDetectionApi } from '../lib/api';
 import { makeT } from '../lib/i18n';
 import { CLASS_META, toCSV, toJSON, download, downloadBatchReportPDF } from '../lib/mock';
 import type { DetectionReportSource } from '../lib/mock';
@@ -238,6 +239,7 @@ export function BatchPage() {
                 raw_bbox: p.raw_bbox,
               })),
             };
+            await saveDetectionApi(realDet);
             store.recordDetection(realDet, { silent: true });
             createdDetectionId = realDet.id;
           }

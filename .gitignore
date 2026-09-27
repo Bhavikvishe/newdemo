@@ -34,3 +34,7 @@ venv/
 dev.pid
 # Forecasting / ocean-data cache
 .cache/
+# Local environment and authentication test files
+server/.env
+cookies.txt
+login.json

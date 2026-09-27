@@ -3,7 +3,6 @@ flask-cors
 ultralytics
 pillow
 opencv-python>=4.7
-
 numpy
 scipy
 xarray
@@ -11,3 +10,7 @@ netCDF4
 dask
 copernicusmarine
 pytest
+SQLAlchemy>=2.0,<2.2
+psycopg[binary]>=3.2
+alembic>=1.16,<2
+python-dotenv>=1.1

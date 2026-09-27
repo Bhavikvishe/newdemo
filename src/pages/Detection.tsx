@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DragEvent } from 'react';
 import { useStore } from '../lib/store';
+import { saveDetectionApi } from '../lib/api';
 import { makeT } from '../lib/i18n';
 import { CLASS_META, fmtCoordinate, fmtSize, fmtWeight, pct } from '../lib/mock';
 import type { DetectionReportSource } from '../lib/mock';
@@ -216,6 +217,7 @@ export function DetectionPage() {
         },
       };
 
+      await saveDetectionApi(realDet);
       setResult(realDet);
       store.recordDetection(realDet, { silent: true });
     } catch (err: unknown) {
