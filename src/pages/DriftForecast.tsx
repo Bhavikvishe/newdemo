@@ -1431,9 +1431,34 @@ export function DriftForecastPage() {
 
       <style>{`
         .drift-page-grid {
+          width: 100%;
+          min-width: 0;
           grid-template-columns:
-            minmax(290px, 350px)
+            minmax(0, 350px)
             minmax(0, 1fr);
+        }
+
+        .drift-page-grid > * {
+          min-width: 0;
+          width: 100%;
+        }
+
+        .drift-page-grid .field {
+          min-width: 0;
+          width: 100%;
+        }
+
+        .drift-page-grid input,
+        .drift-page-grid select {
+          min-width: 0;
+          max-width: 100%;
+          width: 100%;
+        }
+
+        .drift-page-grid .map-shell {
+          min-width: 0;
+          max-width: 100%;
+          width: 100%;
         }
 
         .drift-summary-grid {
