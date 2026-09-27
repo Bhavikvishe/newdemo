@@ -98,18 +98,30 @@ const DEFAULT_SIMULATION_ORIGIN: VesselPosition = {
   lng: 73.62,
 };
 
+const NAVIGATION_TARGET_STORAGE_KEY =
+  'anvesha.nav.target';
+
+const LEGACY_NAVIGATION_TARGET_STORAGE_KEY =
+  'oceonix.nav.target';
+
 function storeNavigationTarget(
   target: NavigationTarget | null,
 ) {
   try {
     if (target) {
       localStorage.setItem(
-        'oceonix.nav.target',
+        NAVIGATION_TARGET_STORAGE_KEY,
         JSON.stringify(target),
+      );
+      localStorage.removeItem(
+        LEGACY_NAVIGATION_TARGET_STORAGE_KEY,
       );
     } else {
       localStorage.removeItem(
-        'oceonix.nav.target',
+        NAVIGATION_TARGET_STORAGE_KEY,
+      );
+      localStorage.removeItem(
+        LEGACY_NAVIGATION_TARGET_STORAGE_KEY,
       );
     }
   } catch {
@@ -119,9 +131,13 @@ function storeNavigationTarget(
 
 function readNavigationTarget(): NavigationTarget | null {
   try {
-    const raw = localStorage.getItem(
-      'oceonix.nav.target',
-    );
+    const raw =
+      localStorage.getItem(
+        NAVIGATION_TARGET_STORAGE_KEY,
+      ) ??
+      localStorage.getItem(
+        LEGACY_NAVIGATION_TARGET_STORAGE_KEY,
+      );
 
     if (!raw) {
       return null;
@@ -917,7 +933,200 @@ export function MapPage() {
         ][]);
 
   return (
-    <div>
+    <div className="ocean-map-page">
+      <style>{`
+        .ocean-map-page {
+          width: 100%;
+          min-width: 0;
+        }
+
+        .ocean-map-page .ocean-map-layer-switcher {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          padding: 4px;
+          border: 1px solid var(--line);
+          border-radius: 12px;
+          background: color-mix(in srgb, var(--paper) 88%, transparent);
+        }
+
+        .ocean-map-page .ocean-map-layer-switcher .chip {
+          min-height: 34px;
+          padding: 0 13px;
+          border-radius: 9px;
+        }
+
+        .ocean-map-page .ocean-map-workspace {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(340px, 380px);
+          gap: 20px;
+          align-items: start;
+          width: 100%;
+          min-width: 0;
+        }
+
+        .ocean-map-page .ocean-map-main {
+          min-width: 0;
+          width: 100%;
+        }
+
+        .ocean-map-page .ocean-map-canvas {
+          width: 100%;
+          height: clamp(520px, calc(100vh - 285px), 720px);
+          min-height: 520px;
+          min-width: 0;
+          overflow: hidden;
+          border-radius: 18px;
+          border: 1px solid var(--line);
+          box-shadow: 0 14px 38px rgba(12, 38, 70, 0.08);
+          background: var(--paper);
+        }
+
+        .ocean-map-page .ocean-map-canvas > * {
+          width: 100%;
+          height: 100%;
+          min-width: 0;
+        }
+
+        .ocean-map-page .ocean-map-sidebar {
+          display: flex;
+          flex-direction: column;
+          gap: 14px;
+          min-width: 0;
+          width: 100%;
+          position: sticky;
+          top: 16px;
+          max-height: calc(100vh - 190px);
+          overflow-y: auto;
+          overflow-x: hidden;
+          padding: 1px 2px 2px 0;
+          scrollbar-width: thin;
+        }
+
+        .ocean-map-page .ocean-map-sidebar > .card {
+          min-width: 0;
+          width: 100%;
+          margin: 0;
+        }
+
+        .ocean-map-page .ocean-map-sidebar .input,
+        .ocean-map-page .ocean-map-sidebar .select {
+          min-width: 0;
+          max-width: 100%;
+        }
+
+        .ocean-map-page .ocean-map-sidebar .chip {
+          white-space: nowrap;
+        }
+
+        .ocean-map-page .ocean-map-sidebar .monitor-row {
+          min-width: 0;
+          border-radius: 9px;
+        }
+
+        .ocean-map-page .ocean-map-sidebar .monitor-row:hover {
+          background: color-mix(in srgb, var(--accent) 5%, transparent) !important;
+        }
+
+        .ocean-map-page .ocean-map-compact-actions {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) auto;
+          gap: 8px;
+          align-items: stretch;
+        }
+
+        .ocean-map-page .ocean-map-coordinate-row {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 10px;
+        }
+
+        .ocean-map-page .ocean-map-status-row {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 10px;
+          min-width: 0;
+        }
+
+        .ocean-map-page .ocean-map-metric-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 8px;
+        }
+
+        .ocean-map-page .ocean-map-metric {
+          min-width: 0;
+          padding: 10px 11px;
+          border: 1px solid var(--line-faint);
+          border-radius: 10px;
+          background: color-mix(in srgb, var(--paper-2) 62%, transparent);
+        }
+
+        .ocean-map-page .ocean-map-metric .k {
+          display: block;
+          margin-bottom: 4px;
+        }
+
+        .ocean-map-page .ocean-map-metric .v {
+          display: block;
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        @media (max-width: 1120px) {
+          .ocean-map-page .ocean-map-workspace {
+            grid-template-columns: minmax(0, 1fr) 340px;
+            gap: 16px;
+          }
+
+          .ocean-map-page .ocean-map-canvas {
+            height: 600px;
+          }
+        }
+
+        @media (max-width: 920px) {
+          .ocean-map-page .ocean-map-workspace {
+            grid-template-columns: minmax(0, 1fr);
+          }
+
+          .ocean-map-page .ocean-map-sidebar {
+            position: static;
+            max-height: none;
+            overflow: visible;
+          }
+
+          .ocean-map-page .ocean-map-canvas {
+            height: 560px;
+            min-height: 460px;
+          }
+        }
+
+        @media (max-width: 560px) {
+          .ocean-map-page .ocean-map-layer-switcher {
+            width: 100%;
+          }
+
+          .ocean-map-page .ocean-map-layer-switcher .chip {
+            flex: 1;
+            padding: 0 8px;
+          }
+
+          .ocean-map-page .ocean-map-coordinate-row,
+          .ocean-map-page .ocean-map-metric-grid {
+            grid-template-columns: minmax(0, 1fr);
+          }
+
+          .ocean-map-page .ocean-map-canvas {
+            height: 460px;
+            min-height: 400px;
+            border-radius: 14px;
+          }
+        }
+      `}</style>
+
       <PageHead
         kicker={t(
           'map.title',
@@ -929,12 +1138,7 @@ export function MapPage() {
           'map.sub',
         )}
         right={
-          <div
-            className="row wrap"
-            style={{
-              gap: 8,
-            }}
-          >
+          <div className="ocean-map-layer-switcher">
             {(
               [
                 [
@@ -983,22 +1187,19 @@ export function MapPage() {
         }
       />
 
-      <div
-        className="grid cols-12"
-        style={{
-          gap: 16,
-        }}
-      >
+      <div className="ocean-map-workspace">
         {/* =================================================
             MAP
         ================================================== */}
 
-        <div className="span-8">
-          <GeoOceanMap
-            style={{
-              background:
-                layerBg,
-            }}
+        <div className="ocean-map-main">
+          <div className="ocean-map-canvas">
+            <GeoOceanMap
+              style={{
+                background: layerBg,
+                width: '100%',
+                height: '100%',
+              }}
             fitPts={fitPoints}
             fitKey={
               target
@@ -1520,19 +1721,15 @@ export function MapPage() {
                     : 'map.satellite',
               ).toUpperCase()}
             </div>
-          </GeoOceanMap>
+            </GeoOceanMap>
+          </div>
         </div>
 
         {/* =================================================
             RIGHT SIDE
         ================================================== */}
 
-        <div
-          className="span-4 stack"
-          style={{
-            gap: 16,
-          }}
-        >
+        <div className="ocean-map-sidebar">
           {/* Navigation target */}
 
           <Card>
@@ -1602,12 +1799,7 @@ export function MapPage() {
                 />
               </Field>
 
-              <div
-                className="row"
-                style={{
-                  gap: 10,
-                }}
-              >
+              <div className="ocean-map-coordinate-row">
                 <Field
                   label={t(
                     'ngx.latField',
@@ -1659,12 +1851,7 @@ export function MapPage() {
                 </Field>
               </div>
 
-              <div
-                className="row"
-                style={{
-                  gap: 8,
-                }}
-              >
+              <div className="ocean-map-compact-actions">
                 <Button
                   variant="secondary"
                   block
@@ -1752,7 +1939,7 @@ export function MapPage() {
             />
 
             <div
-              className="row-between"
+              className="ocean-map-status-row"
               style={{
                 marginBottom: 10,
               }}
@@ -1916,72 +2103,55 @@ export function MapPage() {
 
               {navigationMetrics ? (
                 <>
-                  <div className="kv">
-                    <span className="k">
-                      {t(
-                        'ngx.distToSite',
-                      )}
-                    </span>
+                  <div className="ocean-map-metric-grid">
+                    <div className="ocean-map-metric">
+                      <span className="k tiny muted">
+                        {t('ngx.distToSite')}
+                      </span>
+                      <span className="v mono">
+                        {fmtDistanceKm(
+                          navigationMetrics.km,
+                        )}{' '}
+                        ·{' '}
+                        {fmtDistanceNm(
+                          navigationMetrics.nm,
+                        )}
+                      </span>
+                    </div>
 
-                    <span className="v mono">
-                      {fmtDistanceKm(
-                        navigationMetrics.km,
-                      )}{' '}
-                      ·{' '}
-                      {fmtDistanceNm(
-                        navigationMetrics.nm,
-                      )}
-                    </span>
-                  </div>
+                    <div className="ocean-map-metric">
+                      <span className="k tiny muted">
+                        {t('ngx.bearing')}
+                      </span>
+                      <span className="v mono">
+                        {navigationMetrics.bearing.toFixed(0)}
+                        °{' '}
+                        {compass(
+                          navigationMetrics.bearing,
+                        )}
+                      </span>
+                    </div>
 
-                  <div className="kv">
-                    <span className="k">
-                      {t(
-                        'ngx.bearing',
-                      )}
-                    </span>
+                    <div className="ocean-map-metric">
+                      <span className="k tiny muted">
+                        {t('ngx.eta')}
+                      </span>
+                      <span className="v mono">
+                        {navigationMetrics.eta}
+                      </span>
+                    </div>
 
-                    <span className="v mono">
-                      {navigationMetrics.bearing.toFixed(
-                        0,
-                      )}
-                      °{' '}
-                      {compass(
-                        navigationMetrics.bearing,
-                      )}
-                    </span>
-                  </div>
-
-                  <div className="kv">
-                    <span className="k">
-                      {t(
-                        'ngx.eta',
-                      )}
-                    </span>
-
-                    <span className="v mono">
-                      {
-                        navigationMetrics.eta
-                      }
-                    </span>
-                  </div>
-
-                  <div className="kv">
-                    <span className="k">
-                      {t(
-                        'ngx.gcRoute',
-                      )}
-                    </span>
-
-                    <span className="v mono">
-                      {t(
-                        'ngx.waypoints',
-                        {
+                    <div className="ocean-map-metric">
+                      <span className="k tiny muted">
+                        {t('ngx.gcRoute')}
+                      </span>
+                      <span className="v mono">
+                        {t('ngx.waypoints', {
                           count:
                             navigationRoute.length,
-                        },
-                      )}
-                    </span>
+                        })}
+                      </span>
+                    </div>
                   </div>
                 </>
               ) : (
@@ -2019,14 +2189,14 @@ export function MapPage() {
                 )
               }
               style={{
-                marginBottom: 14,
+                marginBottom: 12,
               }}
             />
 
             <div
               className="stack"
               style={{
-                gap: 12,
+                gap: 10,
               }}
             >
               <div>
