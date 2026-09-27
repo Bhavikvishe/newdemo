@@ -493,11 +493,11 @@ export function BatchPage() {
           });
         }
       });
-      download('oceonix-real-batch.csv', toCSV(rows), 'text/csv');
+      download('anvesha-real-batch.csv', toCSV(rows), 'text/csv');
       addToast({
         kind: 'success',
         title: t('batch.exported.title'),
-        text: t('batch.exported.csv', { file: 'oceonix-real-batch.csv' }),
+        text: t('batch.exported.csv', { file: 'anvesha-real-batch.csv' }),
       });
     } else if (fmt === 'json') {
       const jsonData = items.map((it) => ({
@@ -508,11 +508,11 @@ export function BatchPage() {
         avgConfidence: it.avgConfidence,
         predictions: it.predictions,
       }));
-      download('oceonix-real-batch.json', toJSON(jsonData), 'application/json');
+      download('anvesha-real-batch.json', toJSON(jsonData), 'application/json');
       addToast({
         kind: 'success',
         title: t('batch.exported.title'),
-        text: t('batch.exported.json', { file: 'oceonix-real-batch.json' }),
+        text: t('batch.exported.json', { file: 'anvesha-real-batch.json' }),
       });
     } else {
       try {
@@ -526,7 +526,7 @@ export function BatchPage() {
         addToast({
           kind: 'alert',
           title: t('common.failed'),
-          text: t('rpt.toastExportError', { file: 'oceonix-real-batch.pdf' }),
+          text: t('rpt.toastExportError', { file: 'anvesha-real-batch.pdf' }),
         });
       }
     }

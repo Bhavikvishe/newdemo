@@ -236,7 +236,7 @@ export function HistoryPage() {
     }));
 
     download(
-      'oceonix-history.csv',
+      'anvesha-history.csv',
       toCSV(data),
       'text/csv',
     );

@@ -1,4 +1,4 @@
-"""Validation script for OCEONIX YOLO detection pipeline.
+"""Validation script for ANVESHA YOLO detection pipeline.
 
 Runs raw YOLO inference and server model pipeline on test images across multiple
 confidence thresholds to evaluate precision, recall, and class mapping fidelity.
@@ -19,7 +19,7 @@ from PIL import Image, ImageDraw
 
 def run_validation(image_path: str | None = None, weights_path: str | None = None):
     print("=" * 60)
-    print("OCEONIX YOLO PIPELINE VALIDATION & AUDIT")
+    print("ANVESHA YOLO PIPELINE VALIDATION & AUDIT")
     print("=" * 60)
 
     try:
@@ -165,7 +165,7 @@ def run_validation(image_path: str | None = None, weights_path: str | None = Non
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="OCEONIX Detection Validation")
+    parser = argparse.ArgumentParser(description="ANVESHA Detection Validation")
     parser.add_argument("--image", type=str, default=None, help="Path to test image")
     parser.add_argument("--weights", type=str, default=None, help="Path to weights file")
     args = parser.parse_args()

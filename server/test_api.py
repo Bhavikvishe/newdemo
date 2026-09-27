@@ -1,4 +1,4 @@
-"""Test Flask API endpoints for OCEONIX detection server."""
+"""Test Flask API endpoints for ANVESHA detection server."""
 
 import io
 import sys
@@ -13,7 +13,7 @@ from server.app import app
 
 def test_api():
     print("=" * 60)
-    print("TESTING OCEONIX FLASK API ENDPOINTS")
+    print("TESTING ANVESHA FLASK API ENDPOINTS")
     print("=" * 60)
 
     client = app.test_client()

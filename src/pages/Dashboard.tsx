@@ -1460,7 +1460,7 @@ export function DashboardPage() {
                         );
 
                       download(
-                        'oceonix-detections.csv',
+                        'anvesha-detections.csv',
                         toCSV(rows),
                         'text/csv',
                       );

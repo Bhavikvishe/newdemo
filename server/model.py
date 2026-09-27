@@ -43,34 +43,34 @@ PROJECT_ROOT = SERVER_DIR.parent
 
 
 DEFAULT_WEIGHTS = os.environ.get(
-    "OCEONIX_WEIGHTS",
+    "ANVESHA_WEIGHTS",
     "",
 )
 
 DEFAULT_CONFIDENCE = float(
     os.environ.get(
-        "OCEONIX_CONFIDENCE",
+        "ANVESHA_CONFIDENCE",
         "0.25",
     )
 )
 
 DEFAULT_IOU = float(
     os.environ.get(
-        "OCEONIX_IOU",
+        "ANVESHA_IOU",
         "0.70",
     )
 )
 
 DEFAULT_IMAGE_SIZE = int(
     os.environ.get(
-        "OCEONIX_IMAGE_SIZE",
+        "ANVESHA_IMAGE_SIZE",
         "640",
     )
 )
 
 DEBUG_DETECTION = (
     os.environ.get(
-        "OCEONIX_DEBUG_DETECTION",
+        "ANVESHA_DEBUG_DETECTION",
         "false",
     )
     .lower()
@@ -139,7 +139,7 @@ def _load_model():
             f"Trained weights not found at {weights}. "
             f"Expected at {PROJECT_ROOT / 'best.pt'} "
             f"or {SERVER_DIR / 'best.pt'}. "
-            "Set OCEONIX_WEIGHTS to the absolute path "
+            "Set ANVESHA_WEIGHTS to the absolute path "
             "of your .pt file."
         )
 

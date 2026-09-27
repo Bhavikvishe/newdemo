@@ -1,4 +1,4 @@
-"""GEBCO bathymetry backend for OCEONIX.
+"""GEBCO bathymetry backend for ANVESHA.
 
 Uses the Ocean Data Bank GEBCO Open API instead of OpenTopoData.
 
@@ -20,7 +20,7 @@ from typing import Any, Dict
 
 # Official ODB GEBCO API.
 GEBCO_API_URL = os.environ.get(
-    "OCEONIX_GEBCO_URL",
+    "ANVESHA_GEBCO_URL",
     "https://api.odb.ntu.edu.tw/gebco",
 )
 
@@ -87,7 +87,7 @@ def _query_gebco(
         url,
         headers={
             "User-Agent": (
-                "OCEONIX-Undersea-Intelligence/3.0 "
+                "ANVESHA-Undersea-Intelligence/3.0 "
                 "(GEBCO bathymetry)"
             ),
             "Accept": "application/json",
@@ -617,8 +617,8 @@ def get_bathymetry(
             "warning": None,
         }
     else:
-        dataset_name = "OCEONIX_SYNTHETIC_FALLBACK"
-        source_name = "OCEONIX local synthetic bathymetry fallback"
+        dataset_name = "ANVESHA_SYNTHETIC_FALLBACK"
+        source_name = "ANVESHA local synthetic bathymetry fallback"
         resolution_name = "Synthetic model — not a GEBCO measurement"
         provenance = {
             "source_name": source_name,

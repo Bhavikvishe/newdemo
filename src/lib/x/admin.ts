@@ -1,5 +1,5 @@
 ﻿export const xEn: Record<string, string> = {
-  'adm.sub': 'Assign tasks to departments and operators across the OCEONIX command chain. Route every open case to the right unit and member.',
+  'adm.sub': 'Assign tasks to departments and operators across the ANVESHA command chain. Route every open case to the right unit and member.',
   'adm.openTasks': 'Open tasks',
   'adm.unassigned': 'Unassigned',
   'adm.inProgress': 'In progress',

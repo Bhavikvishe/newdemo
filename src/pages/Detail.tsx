@@ -345,7 +345,7 @@ export function DetailPage() {
             <div className="route-viz">
               <div className="rv-seg">
                 <span className="rv-dot" />
-                <div><b>OCEONIX AI</b><span>{t('detail.sonarDetection')} · {categoryLabel(meta.category, language)}</span></div>
+                <div><b>ANVESHA AI</b><span>{t('detail.sonarDetection')} · {categoryLabel(meta.category, language)}</span></div>
               </div>
               <div className="rv-line" />
               <div className="rv-seg on">
@@ -457,12 +457,12 @@ export function DetailPage() {
                 <div className="tl-item done">
                   <b>{t('detail.sonarDetRecorded')}</b>
                   <p>{t('detail.monitorLedgerEntry')}</p>
-                  <span className="tm">{fmtDT(det.detectionTime)} · OCEONIX AI</span>
+                  <span className="tm">{fmtDT(det.detectionTime)} · ANVESHA AI</span>
                 </div>
                 <div className="tl-item done">
                   <b>{t('detail.loggedSurvey')}</b>
                   <p>{t('detail.mantaObservation')}</p>
-                  <span className="tm">{fmtDT(det.detectionTime)} · OCEONIX AI</span>
+                  <span className="tm">{fmtDT(det.detectionTime)} · ANVESHA AI</span>
                 </div>
               </div>
             )}

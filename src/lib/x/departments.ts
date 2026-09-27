@@ -1,6 +1,6 @@
 ﻿export const xEn: Record<string, string> = {
   'dpt.title': 'Departments & command',
-  'dpt.sub': 'Six response units organised around the OCEONIX routing engine. Scores below are computed live from the ledger.',
+  'dpt.sub': 'Six response units organised around the ANVESHA routing engine. Scores below are computed live from the ledger.',
   'dpt.ktCommand': 'command chain',
   'dpt.workflow': 'Response workflow',
   'dpt.step.detect': 'Detect',
