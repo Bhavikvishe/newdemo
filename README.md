@@ -30,6 +30,10 @@ The repository combines:
 - a **Flask** backend,
 - **Ultralytics YOLO** inference,
 - **OpenCV** sonar-image preprocessing,
+- **PostgreSQL** persistence through **SQLAlchemy + psycopg**,
+- **Alembic** database migrations,
+- session-based authentication with CSRF protection,
+- acoustic-shadow validation for side-scan sonar detections,
 - **EXIF GPS extraction** from the original image,
 - **GEBCO bathymetry** retrieval through the Ocean Data Bank GEBCO API,
 - **marine/weather data** retrieval from Open-Meteo,
@@ -89,7 +93,21 @@ The application does not derive geographic coordinates from a YOLO bounding box.
 
 If an image contains no usable GPS coordinates, the real detection workflow reports an error instead of inventing a location.
 
-### 4. Bathymetry / depth analysis
+### 4. Acoustic-shadow validation
+
+The detection pipeline now performs a post-YOLO acoustic check using the original oriented sonar image. It evaluates both sides of each detection for acoustic-shadow evidence and combines shadow darkness, dark-area fraction, alignment and target/background contrast.
+
+The API preserves the original YOLO confidence and additionally returns:
+
+```text
+final_confidence
+acoustic_validation
+false_positive_risk
+```
+
+The current implementation is a validation/fusion stage only. It does **not** hard-reject detections yet; thresholds will be calibrated against real sonar examples and hard negatives before enabling rejection.
+
+### 5. Bathymetry / depth analysis
 
 The frontend calls:
 
@@ -169,7 +187,53 @@ The UI includes pages and state handling for:
 
 Application state is coordinated through the React store in `src/lib/store.tsx`.
 
-### 8. Multi-language UI
+### 8. PostgreSQL authentication and detection persistence
+
+The application now includes backend-backed authentication and detection persistence using PostgreSQL, SQLAlchemy, psycopg and Alembic.
+
+Authentication includes:
+
+- password hashing,
+- server-side session records,
+- HTTP-only session cookies,
+- CSRF protection,
+- department-aware registration/login,
+- role-aware users.
+
+Authentication endpoints:
+
+```text
+GET  /api/auth/csrf
+POST /api/auth/register
+POST /api/auth/login
+GET  /api/auth/me
+POST /api/auth/logout
+GET  /api/users
+```
+
+Detection persistence endpoints:
+
+```text
+POST   /api/detections
+GET    /api/detections
+GET    /api/detections/<id>
+DELETE /api/detections/<id>
+```
+
+Detection records persist prediction JSON, GPS, bounding boxes, model/inference details, risk fields, department and timestamps. The authenticated user's department is enforced server-side when a detection is saved.
+
+The current PostgreSQL schema contains:
+
+```text
+users
+auth_sessions
+detections
+alerts
+```
+
+Alembic migrations are stored in `migrations/`. The `alerts` model is prepared for a future persistence phase; much of the current alert workflow remains in the frontend.
+
+### 9. Multi-language UI
 
 The frontend includes dictionaries for:
 
@@ -203,10 +267,14 @@ flowchart LR
     FE -->|GET /api/gebco/depth| API
     FE -->|POST /api/drift/forecast| API
 
+    API --> AUTH[Auth + CSRF]
+    AUTH --> DB[(PostgreSQL)]
     API --> DET[Detection Service]
     DET --> PRE[OpenCV Preprocessing]
     PRE --> YOLO[Ultralytics YOLO\nbest.pt]
+    DET --> SHADOW[Acoustic Shadow Validation]
     DET --> EXIF[EXIF GPS Extraction]
+    DET --> DB
 
     API --> GEBCO[GEBCO Service]
     GEBCO --> ODB[Ocean Data Bank\nGEBCO API]
@@ -332,6 +400,10 @@ flowchart TB
 | Dask | Array/data processing support |
 | Copernicus Marine | Optional marine data source |
 | Pytest | Automated backend tests |
+| SQLAlchemy | PostgreSQL ORM / persistence |
+| psycopg | PostgreSQL database driver |
+| Alembic | Database schema migrations |
+| python-dotenv | Environment configuration |
 
 ## External data/services
 
@@ -401,7 +473,35 @@ source .venv/bin/activate
 pip install -r server/requirements.txt
 ```
 
-## 5. Provide the YOLO weights
+## 5. Configure PostgreSQL
+
+Create a PostgreSQL database such as `anvesha`, then create `server/.env` from `server/.env.example`.
+
+Typical local settings are:
+
+```text
+DATABASE_URL=postgresql+psycopg://postgres:YOUR_PASSWORD@localhost:5432/anvesha
+FRONTEND_ORIGIN=http://localhost:5173
+COOKIE_SECURE=false
+FLASK_DEBUG=true
+PORT=5000
+```
+
+Do **not** commit `server/.env` or database credentials.
+
+Run migrations:
+
+```bash
+alembic upgrade head
+```
+
+Verify model/migration alignment:
+
+```bash
+alembic check
+```
+
+## 6. Provide the YOLO weights
 
 The backend searches for:
 
@@ -448,6 +548,11 @@ The detection backend supports these environment variables:
 | `ANVESHA_IMAGE_SIZE` | `640` | Default YOLO inference image size |
 | `ANVESHA_DEBUG_DETECTION` | `false` | Enable extra detection debug output |
 | `ANVESHA_GEBCO_URL` | ODB GEBCO API | Override GEBCO backend URL |
+| `DATABASE_URL` | — | PostgreSQL SQLAlchemy connection URL |
+| `FRONTEND_ORIGIN` | `http://localhost:5173` | Allowed frontend origin |
+| `COOKIE_SECURE` | `false` | Require HTTPS for auth cookies |
+| `FLASK_DEBUG` | `true` | Flask development debug mode |
+| `PORT` | `5000` | Flask listening port |
 
 Additional forecasting configuration is read by the ocean-data layer. The code supports environment variables for Open-Meteo caching and Copernicus configuration, including:
 
@@ -548,6 +653,46 @@ npm run preview
 ---
 
 # Backend API Reference
+
+## Authentication
+
+### `GET /api/auth/csrf`
+Initializes the CSRF token used by state-changing requests.
+
+### `POST /api/auth/register`
+Creates an operator account for an allowed operational department.
+
+### `POST /api/auth/login`
+Authenticates a user and creates a server-side session.
+
+### `GET /api/auth/me`
+Returns the current authenticated user.
+
+### `POST /api/auth/logout`
+Invalidates the current session.
+
+### `GET /api/users`
+Returns the active user directory for authenticated users.
+
+State-changing requests use the `X-CSRF-Token` header.
+
+---
+
+## Detection persistence
+
+### `POST /api/detections`
+Persists an authenticated user's detection record in PostgreSQL.
+
+### `GET /api/detections`
+Returns persisted detections belonging to the authenticated user.
+
+### `GET /api/detections/<id>`
+Returns one persisted detection belonging to the authenticated user.
+
+### `DELETE /api/detections/<id>`
+Deletes one persisted detection belonging to the authenticated user.
+
+---
 
 ## `GET /api/health`
 
@@ -757,7 +902,14 @@ newdemo/
 ├── server/
 │   ├── app.py
 │   ├── model.py
+│   ├── acoustic_shadow.py
 │   ├── image_preprocessing.py
+│   ├── auth.py
+│   ├── auth_routes.py
+│   ├── detection_routes.py
+│   ├── users_routes.py
+│   ├── models.py
+│   ├── db.py
 │   ├── gebco.py
 │   ├── validate_detection.py
 │   ├── compare_confidence.py
@@ -862,6 +1014,14 @@ newdemo/
 │       ├── hero.png
 │       ├── react.svg
 │       └── vite.svg
+│
+├── alembic.ini
+├── migrations/
+│   ├── env.py
+│   ├── script.py.mako
+│   └── versions/
+│       ├── 0001_initial.py
+│       └── 8003edab95eb_align_database_indexes.py
 │
 ├── index.html
 ├── package.json
@@ -1109,12 +1269,15 @@ This repository is structured primarily for development/prototyping. Before prod
 The current codebase has some architectural characteristics worth knowing before treating it as a production platform:
 
 1. **The repository does not contain `best.pt`.** Model inference therefore requires an external weights file.
-2. **Application state is largely client-side.** The main store uses browser persistence rather than a dedicated database.
-3. **There is extensive mock/demo data.** Some operational dashboards are populated locally.
+2. **PostgreSQL persistence is now implemented for authentication and detections.** Alert workflow persistence remains a later phase.
+3. **There is still extensive mock/demo data.** Some operational dashboards are populated locally.
 4. **Third-party marine services can fail or vary in coverage.** GEBCO, Open-Meteo and Copernicus paths should be treated as external dependencies.
-5. **The drift engine is physics/data based, not a learned trajectory model.** The repository uses RK2 integration plus uncertainty and retention calculations.
-6. **Some derived estimates are application heuristics.** They are not direct measurements from the YOLO network.
-7. **Production authentication/authorization is not equivalent to a full identity/security stack.** The current app implements application-level role handling.
+5. **The acoustic-shadow stage is currently a validation/fusion heuristic.** It is not yet a calibrated probability model or hard false-positive rejection system.
+6. **The current acoustic-shadow analysis checks both sides of each bounding box.** Sonar-specific acquisition geometry should be incorporated before treating shadow direction as physically definitive.
+7. **Heave/pitch/roll compensation is not yet implemented.** The current pipeline does not claim to correct vehicle-motion distortion.
+8. **The drift engine is physics/data based, not a learned trajectory model.** The repository uses RK2 integration plus uncertainty and retention calculations.
+9. **Some derived estimates are application heuristics.** They are not direct measurements from the YOLO network.
+10. **Production deployment still needs hardening.** HTTPS, secret management, rate limiting, upload limits, production WSGI serving and stronger operational monitoring remain deployment considerations.
 
 ---
 
@@ -1207,6 +1370,8 @@ server/requirements.txt
 ```
 
 The README describes the code currently present in the repository and intentionally distinguishes real model/data paths from synthetic demo data.
+
+The current implementation also includes PostgreSQL authentication/session handling, persisted detection history, acoustic-shadow validation, and Alembic-managed database schema.
 
 ---
 
