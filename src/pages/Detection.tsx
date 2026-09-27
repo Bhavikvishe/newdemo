@@ -217,7 +217,6 @@ export function DetectionPage() {
         },
       };
 
-      await saveDetectionApi(realDet);
       setResult(realDet);
       store.recordDetection(realDet, { silent: true });
     } catch (err: unknown) {

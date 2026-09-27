@@ -239,7 +239,6 @@ export function BatchPage() {
                 raw_bbox: p.raw_bbox,
               })),
             };
-            await saveDetectionApi(realDet);
             store.recordDetection(realDet, { silent: true });
             createdDetectionId = realDet.id;
           }
