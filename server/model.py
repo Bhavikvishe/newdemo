@@ -1,15 +1,27 @@
-"""YOLO model wrapper for OCEONIX.
+"""YOLO model wrapper for ANVESHA.
 
 The React app POSTs raw image bytes to /api/detect.
 
-The backend:
-1. Reads the original image with PIL.
-2. Extracts GPS from EXIF metadata when available.
-3. Runs the trained YOLO model.
-4. Returns detections plus the image GPS.
+Detection pipeline:
 
-GPS is NEVER calculated from the YOLO bounding box.
+    Raw image bytes
+          ↓
+    PIL original image
+          ↓
+    EXIF GPS extraction
+          ↓
+    OpenCV sonar preprocessing
+          ↓
+    YOLO inference
+          ↓
+    Detection results
+
+GPS is ALWAYS extracted from the original image.
+
+The original image is never modified for metadata extraction.
 """
+
+from __future__ import annotations
 
 import io
 import os
@@ -17,10 +29,18 @@ import time
 from pathlib import Path
 from typing import Any
 
+import cv2
 from PIL import Image, ImageOps
+
+try:
+    from .image_preprocessing import preprocess_sonar_image
+except ImportError:
+    from image_preprocessing import preprocess_sonar_image
+
 
 SERVER_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = SERVER_DIR.parent
+
 
 DEFAULT_WEIGHTS = os.environ.get(
     "OCEONIX_WEIGHTS",
@@ -60,6 +80,7 @@ DEBUG_DETECTION = (
         "yes",
     )
 )
+
 
 _model = None
 _weights_path: Path | None = None
@@ -179,6 +200,30 @@ def get_model_info() -> dict:
             DEFAULT_IOU,
         "default_imgsz":
             DEFAULT_IMAGE_SIZE,
+        "preprocessing": {
+            "enabled": True,
+            "method": (
+                "LAB luminance denoising + CLAHE"
+            ),
+            "denoising": {
+                "method":
+                    "fastNlMeansDenoising",
+                "h":
+                    5,
+                "template_window":
+                    7,
+                "search_window":
+                    21,
+            },
+            "clahe": {
+                "clip_limit":
+                    2.0,
+                "tile_grid_size": [
+                    8,
+                    8,
+                ],
+            },
+        },
         "debug":
             DEBUG_DETECTION,
     }
@@ -269,7 +314,10 @@ def _dms_to_decimal(
             + seconds / 3600.0
         )
 
-        if ref in ("S", "W"):
+        if ref in (
+            "S",
+            "W",
+        ):
             decimal = -decimal
 
         return decimal
@@ -281,7 +329,7 @@ def _dms_to_decimal(
 def _extract_gps(
     image: Image.Image,
 ) -> dict | None:
-    """Extract GPS coordinates from image EXIF metadata."""
+    """Extract GPS coordinates from original image EXIF."""
 
     try:
         exif = image.getexif()
@@ -289,7 +337,9 @@ def _extract_gps(
         if not exif:
             return None
 
-        gps_info = exif.get_ifd(34853)
+        gps_info = exif.get_ifd(
+            34853,
+        )
 
         if not gps_info:
             return None
@@ -355,6 +405,42 @@ def _extract_gps(
         return None
 
 
+def _pil_to_bgr(
+    image: Image.Image,
+) -> Any:
+    """Convert a PIL image to an OpenCV BGR ndarray."""
+
+    rgb = image.convert(
+        "RGB",
+    )
+
+    rgb_array = __import__(
+        "numpy"
+    ).array(
+        rgb,
+    )
+
+    return cv2.cvtColor(
+        rgb_array,
+        cv2.COLOR_RGB2BGR,
+    )
+
+
+def _bgr_to_pil(
+    image_bgr: Any,
+) -> Image.Image:
+    """Convert an OpenCV BGR ndarray back to PIL RGB."""
+
+    rgb = cv2.cvtColor(
+        image_bgr,
+        cv2.COLOR_BGR2RGB,
+    )
+
+    return Image.fromarray(
+        rgb,
+    )
+
+
 def detect(
     image_bytes: bytes,
     conf: float | None = None,
@@ -362,10 +448,12 @@ def detect(
     imgsz: int | None = None,
     include_debug: bool | None = None,
 ) -> dict:
-    """Run trained YOLO model on raw image bytes.
+    """
+    Run the ANVESHA sonar detection pipeline.
 
-    GPS is extracted from the original image EXIF metadata before
-    any image transformation is applied.
+    GPS is extracted from the original image before any preprocessing.
+
+    YOLO receives the OpenCV-denoised and contrast-enhanced image.
     """
 
     start_t = time.perf_counter()
@@ -397,9 +485,11 @@ def detect(
     )
 
     # ---------------------------------------------------------------
-    # Read ORIGINAL image.
+    # 1. Read ORIGINAL image.
+    #
     # GPS must be extracted BEFORE any transformation.
     # ---------------------------------------------------------------
+
     raw_pil = Image.open(
         io.BytesIO(
             image_bytes,
@@ -410,28 +500,102 @@ def detect(
         raw_pil,
     )
 
-    # Correct orientation for inference.
-    img = (
+    # ---------------------------------------------------------------
+    # 2. Correct image orientation.
+    #
+    # EXIF GPS has already been extracted from raw_pil.
+    # ---------------------------------------------------------------
+
+    oriented_pil = (
         ImageOps
         .exif_transpose(
             raw_pil,
         )
-        .convert("RGB")
+        .convert(
+            "RGB",
+        )
     )
 
-    orig_w, orig_h = img.size
+    orig_w, orig_h = oriented_pil.size
 
     # ---------------------------------------------------------------
-    # YOLO inference
+    # 3. Convert PIL → OpenCV BGR.
     # ---------------------------------------------------------------
+
+    original_bgr = _pil_to_bgr(
+        oriented_pil,
+    )
+
+    # ---------------------------------------------------------------
+    # 4. OpenCV sonar preprocessing.
+    #
+    # Based on the reference sonar pipeline:
+    #
+    # BGR
+    #  ↓
+    # LAB
+    #  ↓
+    # L channel
+    #  ↓
+    # fastNlMeansDenoising
+    #  ↓
+    # CLAHE
+    #  ↓
+    # LAB
+    #  ↓
+    # BGR
+    #
+    # Image dimensions are preserved.
+    # ---------------------------------------------------------------
+
+    preprocessing_start = time.perf_counter()
+
+    processed_bgr = preprocess_sonar_image(
+        original_bgr,
+    )
+
+    preprocessing_time_ms = round(
+        (
+            time.perf_counter()
+            - preprocessing_start
+        )
+        * 1000,
+        2,
+    )
+
+    # ---------------------------------------------------------------
+    # 5. Convert processed BGR → PIL RGB.
+    #
+    # Ultralytics can then receive the processed PIL image directly.
+    # ---------------------------------------------------------------
+
+    processed_pil = _bgr_to_pil(
+        processed_bgr,
+    )
+
+    # ---------------------------------------------------------------
+    # 6. YOLO inference.
+    # ---------------------------------------------------------------
+
+    inference_start = time.perf_counter()
+
     results = model.predict(
-        source=img,
+        source=processed_pil,
         conf=conf_thresh,
         iou=iou_thresh,
         imgsz=img_size,
         augment=False,
         agnostic_nms=False,
         verbose=False,
+    )
+
+    inference_time_ms = round(
+        (
+            time.perf_counter()
+            - inference_start
+        )
+        * 1000,
+        2,
     )
 
     r = results[0]
@@ -546,6 +710,7 @@ def detect(
     response = {
         "predictions":
             out,
+
         "gps":
             gps,
     }
@@ -589,7 +754,42 @@ def detect(
             "post_detections":
                 len(out),
 
+            "preprocessing": {
+                "enabled":
+                    True,
+
+                "method":
+                    "LAB luminance denoising + CLAHE",
+
+                "denoising":
+                    "fastNlMeansDenoising",
+
+                "denoising_h":
+                    5,
+
+                "template_window":
+                    7,
+
+                "search_window":
+                    21,
+
+                "clahe_clip_limit":
+                    2.0,
+
+                "clahe_tile_grid":
+                    [
+                        8,
+                        8,
+                    ],
+
+                "time_ms":
+                    preprocessing_time_ms,
+            },
+
             "inference_time_ms":
+                inference_time_ms,
+
+            "total_time_ms":
                 elapsed_ms,
         }
 
