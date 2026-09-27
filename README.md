@@ -1,7 +1,7 @@
 # ANVESHA — Marine Intelligence & Underwater Object Analysis
 
 <p align="center">
-  <img src="public/anvesha-logo.png" alt="ANVESHA logo" width="180" />
+  <img src="public/Anvesha_logo.png" alt="ANVESHA logo" width="180" />
 </p>
 
 <p align="center">
